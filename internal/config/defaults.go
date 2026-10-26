@@ -3,7 +3,7 @@ package config
 import "time"
 
 func Default() *Config {
-	return &Config{
+	c := &Config{
 		General: General{Layout: "split", SplitRatio: 0.55},
 		Calendar: CalendarConfig{
 			WeekStart:       "monday",
@@ -16,6 +16,11 @@ func Default() *Config {
 		Sync:    SyncConfig{Interval: duration{5 * time.Minute}},
 		Google:  GoogleConfig{PastDays: 365},
 		Todoist: TodoistConfig{BaseURL: "https://api.todoist.com/api/v1"},
+		Reminders: RemindersConfig{
+			Timed:   []string{"10m"},
+			AllDay:  []string{"09:00"},
+			Urgency: "critical",
+		},
 		Theme: Theme{
 			Accent:    "#7aa2f7",
 			Muted:     "#565f89",
@@ -29,6 +34,10 @@ func Default() *Config {
 		},
 		Keys: DefaultKeys(),
 	}
+	if err := c.parseReminders(); err != nil {
+		panic(err) // the built-in defaults are always valid
+	}
+	return c
 }
 
 // Action names used as keys in the [keys] config table.

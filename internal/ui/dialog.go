@@ -5,7 +5,6 @@ import (
 
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/x/ansi"
 
 	"caldo/internal/ui/theme"
 )
@@ -14,6 +13,12 @@ import (
 type dialog interface {
 	Update(tea.KeyPressMsg) (cmd tea.Cmd, done bool)
 	View(th *theme.Theme, maxW, maxH int) string
+}
+
+// msgDialog is a dialog that also wants non-key messages: pastes
+// (tea.PasteMsg, or the clipboard read behind ctrl+v) and cursor blinks.
+type msgDialog interface {
+	HandleMsg(tea.Msg) tea.Cmd
 }
 
 func frame(th *theme.Theme, title string, lines []string, w int, maxH int) string {
@@ -41,7 +46,7 @@ func (d *confirmDialog) Update(k tea.KeyPressMsg) (tea.Cmd, bool) {
 }
 
 func (d *confirmDialog) View(th *theme.Theme, maxW, maxH int) string {
-	w := dialogWidth(maxW, max(40, ansi.StringWidth(d.msg)+6))
+	w := dialogWidth(maxW, max(40, theme.StringWidth(d.msg)+6))
 	return frame(th, "Confirm", []string{d.msg, "", th.StatusKey.Render("y") + " yes   " + th.StatusKey.Render("n") + " no"}, w, maxH)
 }
 
@@ -73,6 +78,12 @@ func (d *inputDialog) Update(k tea.KeyPressMsg) (tea.Cmd, bool) {
 	var cmd tea.Cmd
 	d.input, cmd = d.input.Update(k)
 	return cmd, false
+}
+
+func (d *inputDialog) HandleMsg(msg tea.Msg) tea.Cmd {
+	var cmd tea.Cmd
+	d.input, cmd = d.input.Update(msg)
+	return cmd
 }
 
 func (d *inputDialog) View(th *theme.Theme, maxW, maxH int) string {

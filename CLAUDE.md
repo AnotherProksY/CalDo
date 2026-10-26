@@ -40,7 +40,11 @@ Commands (inside the box):
 
 **Key bindings** are action names (`config.Act*`) mapped to key strings in `config.DefaultKeys()` and overridable from `[keys]` in config.toml. To add a key, add the action constant and default binding, handle it in `ui/app.go`, and list it in `helpSections` (`ui/keys.go`).
 
-**Sync scheduling.** `syncer.Syncer` runs providers sequentially inside a `tea.Cmd`. The UI reschedules with `tea.Tick`: every `sync.interval`, or at most 1 minute while offline (detected by `syncer.IsOffline`). The store uses a single DB connection (`SetMaxOpenConns(1)`), which serializes UI and sync writers.
+**Reminders and notifications.** `Event.Reminders` holds offsets from the start (negative = before). nil means the `[reminders]` defaults, or for an exception the series' reminders (`remind.Defaults.For`). They are local-only, stored in the `event_reminders` table, which `PutRemoteEvent` never touches. `SaveEvent` skips the outbox when `Event.SameContent` says only local fields changed, and `applyEventChange` applies a reminders-only edit of a recurring occurrence to the series instead of creating an exception. `caldo notify` (`internal/notify`) runs from a systemd timer every minute. It fires reminders whose time has passed (by less than 24h) for events that are not over, and dedupes them through the `notified` table. Its first run is silent.
+
+**Sync scheduling.** `syncer.Syncer` runs providers sequentially inside a `tea.Cmd`. The UI reschedules with `tea.Tick`: every `sync.interval`, or at most 1 minute while offline (detected by `syncer.IsOffline`). The store uses a single DB connection (`SetMaxOpenConns(1)`), which serializes UI and sync writers. A background `caldo sync` (systemd timer) may run alongside the TUI. `Syncer.LockFile` (`sync.lock` next to the DB, flock) keeps the two from syncing at once, and the TUI polls `PRAGMA data_version` every 15s to reload after another process writes.
+
+**Cell widths.** All width math goes through `theme.StringWidth`/`theme.Truncate`/`theme.Fit`, never `ansi.StringWidth` or lipgloss widths directly. `theme.WidthMethod` mirrors the Bubble Tea renderer: wcwidth by default (tmux), and grapheme clusters after the terminal reports mode 2027. `theme.Fit` also strips U+FE0F (the emoji presentation selector). tmux 3.4+ counts it as widening the preceding character, while foot and wcwidth do not, so leaving it in shifts the rest of the line in some terminal stacks.
 
 ## Testing notes
 

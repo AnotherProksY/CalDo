@@ -80,16 +80,40 @@ func (t *Theme) Fg(hex string) lipgloss.Style {
 	return lipgloss.NewStyle().Foreground(lipgloss.Color(hex))
 }
 
+// WidthMethod must match how the Bubble Tea renderer measures cells: wcwidth
+// by default (tmux, most terminals), grapheme clusters once the terminal
+// reports Unicode core mode 2027. Otherwise emoji with variation selectors
+// shift the layout.
+var WidthMethod = ansi.WcWidth
+
+// StringWidth returns the display width of s in cells.
+func StringWidth(s string) int { return WidthMethod.StringWidth(s) }
+
+// Truncate cuts s to at most w cells, appending tail when cut.
+func Truncate(s string, w int, tail string) string { return WidthMethod.Truncate(s, w, tail) }
+
+// emojiVS is the emoji presentation selector (U+FE0F). Terminals disagree on
+// whether it widens the preceding character (tmux 3.4+ does, foot and wcwidth
+// do not), which shifts everything after it, so it is dropped before drawing.
+const emojiVS = "\uFE0F"
+
 // Fit pads or truncates s to exactly w cells.
 func Fit(s string, w int) string {
 	if w <= 0 {
 		return ""
 	}
-	sw := ansi.StringWidth(s)
-	if sw > w {
-		return ansi.Truncate(s, w, "…")
+	s = strings.ReplaceAll(s, emojiVS, "")
+	sw := StringWidth(s)
+	if sw <= w {
+		return s + strings.Repeat(" ", w-sw)
 	}
-	return s + strings.Repeat(" ", w-sw)
+	// Truncate and StringWidth can disagree on clusters like keycaps (3️⃣),
+	// so measure the result and shorten until it fits.
+	t := Truncate(s, w, "…")
+	for cut := w - 1; StringWidth(t) > w && cut > 0; cut-- {
+		t = Truncate(s, cut, "…")
+	}
+	return t + strings.Repeat(" ", max(0, w-StringWidth(t)))
 }
 
 // Box draws a rounded panel with a title in the top border, calcurse-style.
@@ -106,9 +130,9 @@ func (t *Theme) Box(title string, lines []string, w, h int, active bool) string 
 	var b strings.Builder
 
 	if title != "" {
-		tt := ansi.Truncate(" "+title+" ", w-4, "…")
+		tt := Truncate(" "+strings.ReplaceAll(title, emojiVS, "")+" ", w-4, "…")
 		b.WriteString(bs.Render("╭─") + ts.Render(tt) +
-			bs.Render(strings.Repeat("─", max(0, w-3-ansi.StringWidth(tt)))+"╮"))
+			bs.Render(strings.Repeat("─", max(0, w-3-StringWidth(tt)))+"╮"))
 	} else {
 		b.WriteString(bs.Render("╭" + strings.Repeat("─", w-2) + "╮"))
 	}
@@ -136,9 +160,9 @@ func (t *Theme) Rule(label string, w int, active bool) string {
 		return t.BorderStyle.Render(strings.Repeat("─", w))
 	}
 	lbl := " " + label + " "
-	lw := ansi.StringWidth(lbl)
+	lw := StringWidth(lbl)
 	if lw >= w {
-		return ls.Render(ansi.Truncate(lbl, w, "…"))
+		return ls.Render(Truncate(lbl, w, "…"))
 	}
 	left := (w - lw) / 2
 	return t.BorderStyle.Render(strings.Repeat("─", left)) + ls.Render(lbl) +
@@ -154,7 +178,7 @@ func Overlay(bg, fg string, width, height int) string {
 	fgLines := strings.Split(fg, "\n")
 	fw := 0
 	for _, l := range fgLines {
-		fw = max(fw, ansi.StringWidth(l))
+		fw = max(fw, StringWidth(l))
 	}
 	x := max(0, (width-fw)/2)
 	y := max(0, (height-len(fgLines))/2)
@@ -164,8 +188,8 @@ func Overlay(bg, fg string, width, height int) string {
 			break
 		}
 		base := Fit(bgLines[row], width)
-		left := ansi.Truncate(base, x, "")
-		right := ansi.TruncateLeft(base, x+ansi.StringWidth(l), "")
+		left := Truncate(base, x, "")
+		right := WidthMethod.TruncateLeft(base, x+StringWidth(l), "")
 		bgLines[row] = left + "\x1b[0m" + l + "\x1b[0m" + right
 	}
 	return strings.Join(bgLines, "\n")

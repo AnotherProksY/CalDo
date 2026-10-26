@@ -14,6 +14,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"caldo/internal/model"
+	"caldo/internal/remind"
 )
 
 // Lookup resolves the human-readable names used in documents.
@@ -22,6 +23,7 @@ type Lookup struct {
 	Projects  []model.Project
 	Sections  []model.Section
 	Tasks     []*model.Task
+	Reminders remind.Defaults
 }
 
 var ErrEmpty = errors.New("document is empty")
@@ -34,15 +36,60 @@ const (
 // --- events --------------------------------------------------------------
 
 type eventDoc struct {
-	Type       string   `yaml:"type"`
-	Title      string   `yaml:"title"`
-	Calendar   string   `yaml:"calendar"`
-	Start      string   `yaml:"start"`
-	End        string   `yaml:"end"`
-	AllDay     bool     `yaml:"all_day"`
-	Location   string   `yaml:"location"`
-	Timezone   string   `yaml:"timezone,omitempty"`
-	Recurrence []string `yaml:"recurrence,omitempty"`
+	Type       string        `yaml:"type"`
+	Title      string        `yaml:"title"`
+	Calendar   string        `yaml:"calendar"`
+	Start      string        `yaml:"start"`
+	End        string        `yaml:"end"`
+	AllDay     bool          `yaml:"all_day"`
+	Location   string        `yaml:"location"`
+	Timezone   string        `yaml:"timezone,omitempty"`
+	Recurrence []string      `yaml:"recurrence,omitempty"`
+	Reminders  reminderField `yaml:"reminders"`
+}
+
+// reminderField is "default", "none" or a flow list like [10m, 1h].
+type reminderField struct {
+	list []string // nil: defaults; empty: none
+}
+
+func (r reminderField) MarshalYAML() (any, error) {
+	if r.list == nil {
+		return "default", nil
+	}
+	if len(r.list) == 0 {
+		return "none", nil
+	}
+	n := &yaml.Node{Kind: yaml.SequenceNode, Style: yaml.FlowStyle}
+	for _, s := range r.list {
+		n.Content = append(n.Content, &yaml.Node{Kind: yaml.ScalarNode, Value: s})
+	}
+	return n, nil
+}
+
+func (r *reminderField) UnmarshalYAML(n *yaml.Node) error {
+	switch n.Kind {
+	case yaml.ScalarNode:
+		switch v := strings.TrimSpace(n.Value); strings.ToLower(v) {
+		case "", "default", "~", "null":
+			r.list = nil
+		case "none":
+			r.list = []string{}
+		default:
+			r.list = []string{v}
+		}
+	case yaml.SequenceNode:
+		r.list = []string{}
+		for _, c := range n.Content {
+			if c.Kind != yaml.ScalarNode {
+				return errors.New("reminders: expected a list of values like 10m or \"09:00\"")
+			}
+			r.list = append(r.list, c.Value)
+		}
+	default:
+		return errors.New("reminders: expected default, none or a list")
+	}
+	return nil
 }
 
 func EncodeEvent(e *model.Event, l Lookup) []byte {
@@ -54,6 +101,9 @@ func EncodeEvent(e *model.Event, l Lookup) []byte {
 		Location:   e.Location,
 		Timezone:   e.Timezone,
 		Recurrence: e.Recurrence,
+	}
+	if e.Reminders != nil {
+		d.Reminders.list = remind.FormatList(e.Reminders, e.AllDay)
 	}
 	if e.AllDay {
 		d.Start = e.Start.Format(dateLayout)
@@ -74,6 +124,9 @@ func EncodeEvent(e *model.Event, l Lookup) []byte {
 	hdr.WriteString(strings.Join(names, ", "))
 	hdr.WriteString("\n# start/end: YYYY-MM-DD HH:MM (timed) or YYYY-MM-DD (all_day, end inclusive)\n")
 	hdr.WriteString("# recurrence: RFC 5545 lines, e.g. - RRULE:FREQ=WEEKLY;BYDAY=MO,WE\n")
+	fmt.Fprintf(&hdr, "# reminders: default (timed %s, all-day %s), none, or a list:\n",
+		listText(remind.FormatList(l.Reminders.Timed, false)), listText(remind.FormatList(l.Reminders.AllDay, true)))
+	hdr.WriteString("#   timed: time before start [10m, 1h30m, 1d]; all-day: [\"09:00\", \"-1d 18:00\"] (-1d = day before)\n")
 	return render(hdr.String(), d, e.Description)
 }
 
@@ -135,7 +188,20 @@ func DecodeEvent(b []byte, base *model.Event, l Lookup) (*model.Event, error) {
 		}
 		e.Start, e.End = st, en
 	}
+	e.Reminders = nil
+	if d.Reminders.list != nil {
+		if e.Reminders, err = remind.ParseList(d.Reminders.list, e.AllDay); err != nil {
+			return nil, err
+		}
+	}
 	return &e, nil
+}
+
+func listText(ss []string) string {
+	if len(ss) == 0 {
+		return "none"
+	}
+	return "[" + strings.Join(ss, ", ") + "]"
 }
 
 func parseDateTime(s string) (time.Time, error) {

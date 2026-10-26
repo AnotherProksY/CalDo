@@ -53,8 +53,10 @@ type Model struct {
 
 	syncing  bool
 	lastSync time.Time
-	offline  bool
-	syncErr  string
+	// dataVersion detects writes by other processes; see watchTick.
+	dataVersion int64
+	offline     bool
+	syncErr     string
 
 	calColors map[string]string
 	w, h      int
@@ -104,6 +106,8 @@ type syncDoneMsg struct {
 
 type syncTickMsg struct{}
 
+type watchTickMsg struct{}
+
 type statusMsg struct {
 	text  string
 	isErr bool
@@ -144,10 +148,17 @@ func (m *Model) setMessage(s string) {
 }
 
 func (m *Model) Init() tea.Cmd {
+	m.dataVersion, _ = m.st.DataVersion()
+	cmds := []tea.Cmd{watchTick()}
 	if m.syncer != nil && m.syncer.Enabled() {
-		return m.startSync()
+		cmds = append(cmds, m.startSync())
 	}
-	return nil
+	return tea.Batch(cmds...)
+}
+
+// watchTick polls for writes by other processes (background `caldo sync`).
+func watchTick() tea.Cmd {
+	return tea.Tick(15*time.Second, func(time.Time) tea.Msg { return watchTickMsg{} })
 }
 
 func (m *Model) startSync() tea.Cmd {
@@ -183,6 +194,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.w, m.h = msg.Width, msg.Height
 		return m, nil
 
+	case tea.ModeReportMsg:
+		// The renderer switches to grapheme widths when the terminal reports
+		// mode 2027; layout has to measure the same way.
+		if msg.Mode == ansi.ModeUnicodeCore && (msg.Value == ansi.ModeReset ||
+			msg.Value == ansi.ModeSet || msg.Value == ansi.ModePermanentlySet) {
+			theme.WidthMethod = ansi.GraphemeWidth
+		}
+		return m, nil
+
 	case dataChangedMsg:
 		m.reload()
 		return m, nil
@@ -212,6 +232,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case syncTickMsg:
 		return m, m.startSync()
 
+	case watchTickMsg:
+		if v, err := m.st.DataVersion(); err == nil && v != m.dataVersion {
+			m.dataVersion = v
+			m.reload()
+		}
+		return m, watchTick()
+
 	case tea.KeyPressMsg:
 		if m.dlg != nil {
 			cur := m.dlg
@@ -224,6 +251,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.message, m.isError = "", false
 		return m, m.handleKey(msg)
+	}
+	if d, ok := m.dlg.(msgDialog); ok {
+		return m, d.HandleMsg(msg)
 	}
 	return m, nil
 }
@@ -492,7 +522,7 @@ func (m *Model) statusBar() string {
 		right = append(right, th.DoneIcon.Render(s))
 	}
 	r := strings.Join(right, th.Faint.Render("  │  ")) + " "
-	return theme.Fit(left, m.w-ansi.StringWidth(r)) + r
+	return theme.Fit(left, m.w-theme.StringWidth(r)) + r
 }
 
 func ago(t time.Time) string {

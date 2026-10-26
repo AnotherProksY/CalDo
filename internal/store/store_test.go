@@ -105,3 +105,54 @@ func TestEventsForRangeHidesDisabledCalendars(t *testing.T) {
 		t.Fatal("disabled calendar should be hidden")
 	}
 }
+
+func TestRemindersAreLocal(t *testing.T) {
+	s := openTest(t)
+	cal, err := s.UpsertRemoteCalendar(model.Calendar{Provider: model.ProviderGoogle, RemoteID: "c", Name: "Work", Enabled: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	start := time.Date(2026, 11, 2, 10, 0, 0, 0, time.Local)
+	e := &model.Event{CalendarID: cal.ID, RemoteID: "ev1", ETag: "1", Title: "Sync", Start: start, End: start.Add(time.Hour)}
+	if err := s.PutRemoteEvent(e); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := s.Event(e.ID)
+	if got.Reminders != nil {
+		t.Fatalf("new event should use defaults, got %v", got.Reminders)
+	}
+
+	// Changing only reminders queues nothing.
+	got.Reminders = []time.Duration{-15 * time.Minute, -time.Hour}
+	if err := s.SaveEvent(got); err != nil {
+		t.Fatal(err)
+	}
+	if n := s.PendingCount(); n != 0 {
+		t.Fatalf("reminder-only edit queued %d entries", n)
+	}
+
+	// A pull rewriting the event keeps them.
+	pulled := *e
+	pulled.Title, pulled.ETag = "Sync (moved)", "2"
+	if err := s.PutRemoteEvent(&pulled); err != nil {
+		t.Fatal(err)
+	}
+	got, _ = s.Event(e.ID)
+	if len(got.Reminders) != 2 || got.Reminders[1] != -time.Hour || got.Title != "Sync (moved)" {
+		t.Fatalf("after pull: %+v", got)
+	}
+
+	// Explicit "none" survives as an empty, non-nil slice; nil restores defaults.
+	if err := s.SetEventReminders(e.ID, []time.Duration{}); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ = s.Event(e.ID); got.Reminders == nil || len(got.Reminders) != 0 {
+		t.Fatalf("none: %v", got.Reminders)
+	}
+	if err := s.SetEventReminders(e.ID, nil); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ = s.Event(e.ID); got.Reminders != nil {
+		t.Fatalf("defaults: %v", got.Reminders)
+	}
+}

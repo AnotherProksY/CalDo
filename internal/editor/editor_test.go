@@ -43,6 +43,46 @@ func TestEventRoundTrip(t *testing.T) {
 	}
 }
 
+func TestEventReminders(t *testing.T) {
+	start := time.Date(2026, 10, 27, 14, 0, 0, 0, time.Local)
+	e := &model.Event{CalendarID: "c1", Title: "x", Start: start, End: start.Add(time.Hour)}
+	doc := string(EncodeEvent(e, lookup))
+	if !strings.Contains(doc, "reminders: default\n") {
+		t.Fatalf("expected default reminders in:\n%s", doc)
+	}
+	decode := func(t *testing.T, d string) *model.Event {
+		t.Helper()
+		got, err := DecodeEvent([]byte(d), e, lookup)
+		if err != nil {
+			t.Fatalf("%v in:\n%s", err, d)
+		}
+		return got
+	}
+	if got := decode(t, doc); got.Reminders != nil {
+		t.Fatalf("default should decode to nil, got %v", got.Reminders)
+	}
+	got := decode(t, strings.Replace(doc, "\nreminders: default", "\nreminders: [10m, 1h30m]", 1))
+	if len(got.Reminders) != 2 || got.Reminders[1] != -90*time.Minute {
+		t.Fatalf("list: %v", got.Reminders)
+	}
+	if again := string(EncodeEvent(got, lookup)); !strings.Contains(again, "reminders: [10m, 1h30m]\n") {
+		t.Fatalf("list should encode in flow style:\n%s", again)
+	}
+	if got := decode(t, strings.Replace(doc, "\nreminders: default", "\nreminders: none", 1)); got.Reminders == nil || len(got.Reminders) != 0 {
+		t.Fatalf("none: %v", got.Reminders)
+	}
+
+	allDay := strings.NewReplacer("all_day: false", "all_day: true", "start: 2026-10-27 14:00", "start: 2026-10-27",
+		"end: 2026-10-27 15:00", "end: 2026-10-27", "\nreminders: default", "\nreminders: [\"09:00\", \"-1d 18:00\"]").Replace(doc)
+	got = decode(t, allDay)
+	if len(got.Reminders) != 2 || got.Reminders[0] != 9*time.Hour || got.Reminders[1] != -6*time.Hour {
+		t.Fatalf("all-day: %v", got.Reminders)
+	}
+	if _, err := DecodeEvent([]byte(strings.Replace(doc, "\nreminders: default", "\nreminders: [09:00]", 1)), e, lookup); err == nil {
+		t.Fatal("clock time on a timed event should fail")
+	}
+}
+
 func TestEventValidation(t *testing.T) {
 	e := &model.Event{CalendarID: "c1", Title: "x", Start: time.Now(), End: time.Now()}
 	doc := string(EncodeEvent(e, lookup))

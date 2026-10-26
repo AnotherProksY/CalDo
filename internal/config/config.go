@@ -10,19 +10,24 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/adrg/xdg"
+
+	"caldo/internal/remind"
 )
 
 const appName = "caldo"
 
 type Config struct {
-	General  General             `toml:"general"`
-	Calendar CalendarConfig      `toml:"calendar"`
-	Tasks    TasksConfig         `toml:"tasks"`
-	Sync     SyncConfig          `toml:"sync"`
-	Google   GoogleConfig        `toml:"google"`
-	Todoist  TodoistConfig       `toml:"todoist"`
-	Theme    Theme               `toml:"theme"`
-	Keys     map[string][]string `toml:"keys"`
+	General   General             `toml:"general"`
+	Calendar  CalendarConfig      `toml:"calendar"`
+	Tasks     TasksConfig         `toml:"tasks"`
+	Sync      SyncConfig          `toml:"sync"`
+	Google    GoogleConfig        `toml:"google"`
+	Todoist   TodoistConfig       `toml:"todoist"`
+	Reminders RemindersConfig     `toml:"reminders"`
+	Theme     Theme               `toml:"theme"`
+	Keys      map[string][]string `toml:"keys"`
+
+	defaults remind.Defaults
 }
 
 type General struct {
@@ -67,6 +72,15 @@ type GoogleConfig struct {
 type TodoistConfig struct {
 	// BaseURL is overridable for tests.
 	BaseURL string `toml:"base_url"`
+}
+
+type RemindersConfig struct {
+	// Timed are durations before the start of timed events ("10m", "1h").
+	Timed []string `toml:"timed"`
+	// AllDay are clock times for all-day events ("09:00", "-1d 18:00").
+	AllDay []string `toml:"all_day"`
+	// Urgency is passed to notify-send: "low", "normal" or "critical".
+	Urgency string `toml:"urgency"`
 }
 
 type Theme struct {
@@ -132,8 +146,25 @@ func Load(path string) (*Config, error) {
 		return nil, err
 	}
 	c.normalize()
+	if err := c.parseReminders(); err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
 	return c, nil
 }
+
+func (c *Config) parseReminders() error {
+	var err error
+	if c.defaults.Timed, err = remind.ParseList(c.Reminders.Timed, false); err != nil {
+		return fmt.Errorf("reminders.timed: %w", err)
+	}
+	if c.defaults.AllDay, err = remind.ParseList(c.Reminders.AllDay, true); err != nil {
+		return fmt.Errorf("reminders.all_day: %w", err)
+	}
+	return nil
+}
+
+// DefaultReminders are the parsed [reminders] offsets.
+func (c *Config) DefaultReminders() remind.Defaults { return c.defaults }
 
 func (c *Config) normalize() {
 	d := Default()
@@ -148,6 +179,11 @@ func (c *Config) normalize() {
 	}
 	if c.Sync.Interval.Duration < 30*time.Second {
 		c.Sync.Interval = d.Sync.Interval
+	}
+	switch c.Reminders.Urgency {
+	case "low", "normal", "critical":
+	default:
+		c.Reminders.Urgency = d.Reminders.Urgency
 	}
 	if c.Todoist.BaseURL == "" {
 		c.Todoist.BaseURL = d.Todoist.BaseURL

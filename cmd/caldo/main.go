@@ -21,6 +21,8 @@ Commands:
   auth google     connect Google Calendar (opens a browser)
   auth todoist    connect Todoist (paste your API token)
   sync            run one sync cycle and exit
+  notify          show desktop notifications for due reminders and exit
+                  (run every minute from a timer, see contrib/systemd)
   demo            fill the database with sample data (use with --db)
 
 Flags:
@@ -72,6 +74,10 @@ func main() {
 		}
 	case "sync":
 		if err := runSyncOnce(cfg, st, paths); err != nil {
+			fatal(err)
+		}
+	case "notify":
+		if err := runNotify(cfg, st); err != nil {
 			fatal(err)
 		}
 	default:

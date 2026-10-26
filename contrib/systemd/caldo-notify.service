@@ -1,0 +1,6 @@
+[Unit]
+Description=CalDo reminder notifications
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/caldo notify

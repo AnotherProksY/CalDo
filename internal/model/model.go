@@ -1,7 +1,10 @@
 // Package model defines the domain types shared by storage, sync and UI.
 package model
 
-import "time"
+import (
+	"slices"
+	"time"
+)
 
 // Provider identifies where an entity lives remotely.
 type Provider string
@@ -44,12 +47,27 @@ type Event struct {
 	RecurringEventID string
 	OriginalStart    *time.Time
 	Status           string // "confirmed", "tentative", "cancelled"
-	Dirty            bool
-	Deleted          bool
-	UpdatedAt        time.Time
+	// Reminders are offsets from Start (negative = before). They are local to
+	// CalDo and never synced. nil means the configured defaults (for an
+	// exception: the series' reminders); an empty slice means none.
+	Reminders []time.Duration
+	Dirty     bool
+	Deleted   bool
+	UpdatedAt time.Time
 }
 
 const StatusCancelled = "cancelled"
+
+// SameContent reports whether a and b agree on everything the server stores,
+// i.e. a change between them needs no push.
+func (e *Event) SameContent(o *Event) bool {
+	sameOrig := (e.OriginalStart == nil) == (o.OriginalStart == nil) &&
+		(e.OriginalStart == nil || e.OriginalStart.Equal(*o.OriginalStart))
+	return e.CalendarID == o.CalendarID && e.Title == o.Title && e.Description == o.Description &&
+		e.Location == o.Location && e.Start.Equal(o.Start) && e.End.Equal(o.End) &&
+		e.AllDay == o.AllDay && e.Timezone == o.Timezone && slices.Equal(e.Recurrence, o.Recurrence) &&
+		e.RecurringEventID == o.RecurringEventID && sameOrig && e.Status == o.Status && e.Deleted == o.Deleted
+}
 
 func (e *Event) IsRecurring() bool { return len(e.Recurrence) > 0 }
 

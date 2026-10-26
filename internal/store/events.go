@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -91,14 +92,22 @@ func calendarProvider(q interface {
 const eventCols = `id, calendar_id, remote_id, etag, title, description, location, start, end, all_day,
 	timezone, recurrence, recurring_event_id, original_start, status, dirty, deleted, updated_at`
 
+// eventSelect reads events with their local reminders.
+const eventSelect = `SELECT ` + eventCols + `, r.reminders FROM events
+	LEFT JOIN event_reminders r ON r.event_id = events.id`
+
 func scanEvent(sc interface{ Scan(...any) error }) (*model.Event, error) {
 	var e model.Event
 	var start, end, rec, orig, updated string
 	var allDay, dirty, deleted int
+	var rems sql.NullString
 	err := sc.Scan(&e.ID, &e.CalendarID, &e.RemoteID, &e.ETag, &e.Title, &e.Description, &e.Location,
-		&start, &end, &allDay, &e.Timezone, &rec, &e.RecurringEventID, &orig, &e.Status, &dirty, &deleted, &updated)
+		&start, &end, &allDay, &e.Timezone, &rec, &e.RecurringEventID, &orig, &e.Status, &dirty, &deleted, &updated, &rems)
 	if err != nil {
 		return nil, err
+	}
+	if rems.Valid {
+		e.Reminders = decReminders(rems.String)
 	}
 	e.AllDay, e.Dirty, e.Deleted = allDay == 1, dirty == 1, deleted == 1
 	e.Start, e.End = decTime(start), decTime(end)
@@ -114,7 +123,7 @@ func scanEvent(sc interface{ Scan(...any) error }) (*model.Event, error) {
 }
 
 func (s *Store) queryEvents(where string, args ...any) ([]*model.Event, error) {
-	rows, err := s.db.Query(`SELECT `+eventCols+` FROM events WHERE `+where, args...)
+	rows, err := s.db.Query(eventSelect+` WHERE `+where, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -131,12 +140,12 @@ func (s *Store) queryEvents(where string, args ...any) ([]*model.Event, error) {
 }
 
 func (s *Store) Event(id string) (*model.Event, error) {
-	return scanEvent(s.db.QueryRow(`SELECT `+eventCols+` FROM events WHERE id = ?`, id))
+	return scanEvent(s.db.QueryRow(eventSelect+` WHERE id = ?`, id))
 }
 
 // EventByRemoteID returns nil, nil when not found.
 func (s *Store) EventByRemoteID(calID, remoteID string) (*model.Event, error) {
-	e, err := scanEvent(s.db.QueryRow(`SELECT `+eventCols+` FROM events WHERE calendar_id = ? AND remote_id = ?`, calID, remoteID))
+	e, err := scanEvent(s.db.QueryRow(eventSelect+` WHERE calendar_id = ? AND remote_id = ?`, calID, remoteID))
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -191,6 +200,39 @@ func writeEvent(tx *sql.Tx, e *model.Event) error {
 	return err
 }
 
+func writeReminders(tx *sql.Tx, e *model.Event) error {
+	if e.Reminders == nil {
+		_, err := tx.Exec(`DELETE FROM event_reminders WHERE event_id = ?`, e.ID)
+		return err
+	}
+	_, err := tx.Exec(`INSERT INTO event_reminders(event_id, reminders) VALUES (?, ?)
+		ON CONFLICT(event_id) DO UPDATE SET reminders = excluded.reminders`, e.ID, encReminders(e.Reminders))
+	return err
+}
+
+func encReminders(rs []time.Duration) string {
+	parts := make([]string, len(rs))
+	for i, r := range rs {
+		parts[i] = strconv.Itoa(int(r / time.Minute))
+	}
+	return strings.Join(parts, ",")
+}
+
+func decReminders(s string) []time.Duration {
+	out := []time.Duration{}
+	for _, p := range strings.Split(s, ",") {
+		if n, err := strconv.Atoi(strings.TrimSpace(p)); err == nil {
+			out = append(out, time.Duration(n)*time.Minute)
+		}
+	}
+	return out
+}
+
+// SetEventReminders changes only an event's local reminders (nil = defaults).
+func (s *Store) SetEventReminders(id string, rs []time.Duration) error {
+	return s.tx(func(tx *sql.Tx) error { return writeReminders(tx, &model.Event{ID: id, Reminders: rs}) })
+}
+
 // SaveEvent stores a local create or edit and queues it for push.
 func (s *Store) SaveEvent(e *model.Event) error {
 	return s.tx(func(tx *sql.Tx) error {
@@ -203,20 +245,25 @@ func (s *Store) SaveEvent(e *model.Event) error {
 			e.ID = NewID()
 			op = model.OpCreate
 		} else {
-			var oldCal string
-			err := tx.QueryRow(`SELECT calendar_id FROM events WHERE id = ?`, e.ID).Scan(&oldCal)
+			old, err := scanEvent(tx.QueryRow(eventSelect+` WHERE id = ?`, e.ID))
 			if err == sql.ErrNoRows {
 				op = model.OpCreate
 			} else if err != nil {
 				return err
-			} else if oldCal != e.CalendarID {
+			} else if old.CalendarID != e.CalendarID {
 				// Moving between calendars: delete from old, create in new.
-				return s.moveEventCalendar(tx, e, oldCal, p)
+				return s.moveEventCalendar(tx, e, old.CalendarID, p)
+			} else if old.SameContent(e) {
+				// Only local fields (reminders) changed: nothing to push.
+				return writeReminders(tx, e)
 			}
 		}
 		e.Dirty = p != model.ProviderLocal
 		e.UpdatedAt = time.Now()
 		if err := writeEvent(tx, e); err != nil {
+			return err
+		}
+		if err := writeReminders(tx, e); err != nil {
 			return err
 		}
 		_, err = enqueue(tx, p, model.EntityEvent, e.ID, op)
@@ -238,6 +285,9 @@ func (s *Store) moveEventCalendar(tx *sql.Tx, e *model.Event, oldCal string, new
 	e.Dirty = newP != model.ProviderLocal
 	e.UpdatedAt = time.Now()
 	if err := writeEvent(tx, e); err != nil {
+		return err
+	}
+	if err := writeReminders(tx, e); err != nil {
 		return err
 	}
 	_, err = enqueue(tx, newP, model.EntityEvent, e.ID, model.OpCreate)

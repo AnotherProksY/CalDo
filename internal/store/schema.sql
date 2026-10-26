@@ -115,3 +115,17 @@ CREATE TABLE IF NOT EXISTS conflicts (
     local_json  TEXT NOT NULL,
     created_at  TEXT NOT NULL
 );
+
+-- CalDo-only reminders, kept apart from events so pulls never overwrite them.
+-- No row: configured defaults. Empty string: no reminders. Otherwise
+-- comma-separated offsets from the start in minutes (negative = before).
+CREATE TABLE IF NOT EXISTS event_reminders (
+    event_id  TEXT PRIMARY KEY REFERENCES events(id) ON DELETE CASCADE,
+    reminders TEXT NOT NULL
+);
+
+-- Reminders already shown by `caldo notify`.
+CREATE TABLE IF NOT EXISTS notified (
+    key TEXT PRIMARY KEY,
+    at  TEXT NOT NULL
+);

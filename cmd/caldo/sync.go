@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -45,7 +46,9 @@ func buildSyncer(cfg *config.Config, st *store.Store, paths config.Paths) *synce
 			}
 		}
 	}
-	return syncer.New(providers...)
+	s := syncer.New(providers...)
+	s.LockFile = filepath.Join(filepath.Dir(paths.DBFile), "sync.lock")
+	return s
 }
 
 func runTUISyncer(cfg *config.Config, st *store.Store, paths config.Paths) ui.Syncer {

@@ -26,6 +26,13 @@ client_secret_file = ""
 calendars = []            # names or ids to sync; empty = all
 past_days = 365           # how far back the first full sync reaches
 
+[reminders]
+# Defaults for events that do not set their own `reminders` (see `e` in the app).
+# Reminders are CalDo-only: they are not synced to Google Calendar.
+timed = ["10m"]           # before the start: "10m", "1h30m", "1d"
+all_day = ["09:00"]       # on the day at 09:00; "-1d 18:00" = the day before at 18:00
+urgency = "critical"      # notify-send urgency: "low", "normal" or "critical"
+
 [theme]
 accent = "#7aa2f7"
 muted = "#565f89"

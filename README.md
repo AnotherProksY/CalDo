@@ -7,6 +7,7 @@ A terminal calendar and task manager with two-way sync to **Google Calendar** an
 - Month grid with a day list, plus week and agenda views. Recurring events are supported, with "only this / this and following / all" edits.
 - The task list looks like taskbook: groups with `[done/total]`, `✔ ☐` icons, priorities and a completion summary.
 - Press `e` to edit any event or task in `$EDITOR` (vim/nvim) as a YAML frontmatter + Markdown document.
+- Desktop notifications for event reminders via `notify-send`, with separate defaults for timed and all-day events, overridable per event.
 - Local-first: everything works offline. Changes are queued and pushed when you're back online. If an item changes in both places, the server version wins, and your version is kept under `C` (conflicts) so you can restore it.
 
 ## Build
@@ -30,6 +31,21 @@ make demo         # try it with sample data in a throwaway database
 Tokens are stored in the system keyring. If no keyring is available, they go in `~/.local/share/caldo/secrets.json` with mode 0600.
 
 `caldo sync` runs one sync cycle from the shell. The TUI syncs on start, every `sync.interval`, and when you press `r`.
+
+## Reminders and background sync
+
+Default reminders live under `[reminders]` in `config.toml` (see `config.example.toml`): `timed = ["10m"]` fires 10 minutes before an event, and `all_day = ["09:00"]` fires at 09:00 on the day (`"-1d 18:00"` means the day before at 18:00). To override them for one event, press `e` and set `reminders:` in the document to `default`, `none`, or a list such as `[10m, 1h]`. Reminders are stored only in CalDo; they are not synced to Google Calendar.
+
+`caldo notify` shows the reminders that are due and exits. Run it every minute from a systemd timer. `caldo sync` can also run in the background, and a lock file keeps it from overlapping with the TUI's own sync. The units in `contrib/systemd` expect the binary at `~/.local/bin/caldo`:
+
+```sh
+ln -s ~/Dev/CalDo/bin/caldo ~/.local/bin/caldo
+cp contrib/systemd/caldo-* ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now caldo-notify.timer caldo-sync.timer
+```
+
+The first `caldo notify` run is silent. It only records the reminders that are already due, so enabling the timer does not replay everything from earlier today.
 
 ## Keys
 

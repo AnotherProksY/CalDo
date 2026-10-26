@@ -16,6 +16,7 @@ import (
 	"caldo/internal/editor"
 	"caldo/internal/model"
 	"caldo/internal/recur"
+	"caldo/internal/remind"
 	"caldo/internal/ui/theme"
 )
 
@@ -80,6 +81,7 @@ func (m *Model) lookup() editor.Lookup {
 	l.Projects, _ = m.st.Projects()
 	l.Sections, _ = m.st.Sections()
 	l.Tasks, _ = m.st.Tasks(true)
+	l.Reminders = m.cfg.DefaultReminders()
 	return l
 }
 
@@ -168,6 +170,15 @@ func (m *Model) applyEventChange(o model.Occurrence, edited *model.Event, sc sco
 		return m.st.SaveEvent(edited)
 	}
 	master := *o.Master
+	if base := occurrenceView(o, sc); base.SameContent(edited) {
+		// Reminders are local and per series; changing only them must not
+		// split the series or create a server-side exception.
+		target := master.ID
+		if sc == scopeThis && o.Event.IsException() {
+			target = o.Event.ID
+		}
+		return m.st.SetEventReminders(target, edited.Reminders)
+	}
 	switch sc {
 	case scopeThis:
 		ex := *edited
@@ -205,6 +216,7 @@ func (m *Model) applyEventChange(o model.Occurrence, edited *model.Event, sc sco
 	all := master
 	all.Title, all.Description, all.Location = edited.Title, edited.Description, edited.Location
 	all.CalendarID, all.Timezone, all.Recurrence = edited.CalendarID, edited.Timezone, edited.Recurrence
+	all.Reminders = edited.Reminders
 	delta := edited.Start.Sub(o.Start)
 	dur := edited.End.Sub(edited.Start)
 	all.AllDay = edited.AllDay
@@ -407,6 +419,7 @@ func (m *Model) eventDetail(o model.Occurrence) dialog {
 	if o.IsRecurring() {
 		lines = append(lines, field("Repeats", strings.Join(o.Master.Recurrence, " ")))
 	}
+	lines = append(lines, field("Remind", m.reminderText(o)))
 	if e.Dirty {
 		lines = append(lines, field("Sync", "pending push"))
 	}
@@ -415,6 +428,24 @@ func (m *Model) eventDetail(o model.Occurrence) dialog {
 		lines = append(lines, wrap(e.Description, 66)...)
 	}
 	return &textDialog{title: "Event", lines: lines, width: 72}
+}
+
+func (m *Model) reminderText(o model.Occurrence) string {
+	rs := m.cfg.DefaultReminders().For(o)
+	if len(rs) == 0 {
+		return "none"
+	}
+	parts := remind.FormatList(rs, o.Event.AllDay)
+	if !o.Event.AllDay {
+		for i := range parts {
+			parts[i] += " before"
+		}
+	}
+	text := strings.Join(parts, ", ")
+	if o.Event.Reminders == nil && (o.Master == nil || o.Master.Reminders == nil) {
+		text += m.th.Faint.Render(" (default)")
+	}
+	return text
 }
 
 // --- tasks ---------------------------------------------------------------

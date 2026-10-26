@@ -115,6 +115,33 @@ func boolInt(b bool) int {
 
 func now() string { return encTime(time.Now()) }
 
+// DataVersion changes whenever another connection (another process) commits
+// to the database.
+func (s *Store) DataVersion() (int64, error) {
+	var v int64
+	err := s.db.QueryRow(`PRAGMA data_version`).Scan(&v)
+	return v, err
+}
+
+// --- notifications -------------------------------------------------------
+
+func (s *Store) WasNotified(key string) (bool, error) {
+	var n int
+	err := s.db.QueryRow(`SELECT COUNT(*) FROM notified WHERE key = ?`, key).Scan(&n)
+	return n > 0, err
+}
+
+func (s *Store) MarkNotified(key string, at time.Time) error {
+	_, err := s.db.Exec(`INSERT OR IGNORE INTO notified(key, at) VALUES (?, ?)`, key, encTime(at))
+	return err
+}
+
+// PruneNotified forgets notifications recorded before t.
+func (s *Store) PruneNotified(t time.Time) error {
+	_, err := s.db.Exec(`DELETE FROM notified WHERE at < ?`, encTime(t))
+	return err
+}
+
 // --- sync state ----------------------------------------------------------
 
 func (s *Store) GetState(key string) (string, error) {

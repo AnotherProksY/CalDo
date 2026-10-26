@@ -70,6 +70,13 @@ func Occurrences(events []*model.Event, from, to time.Time) []model.Occurrence {
 		}
 	}
 
+	Sort(out)
+	return out
+}
+
+// Sort orders occurrences for display: all-day items first on their day,
+// then by start; events come before tasks at the same time.
+func Sort(out []model.Occurrence) {
 	sort.SliceStable(out, func(i, j int) bool {
 		a, b := out[i], out[j]
 		if a.Event.AllDay != b.Event.AllDay && sameDay(a.Start, b.Start) {
@@ -78,9 +85,11 @@ func Occurrences(events []*model.Event, from, to time.Time) []model.Occurrence {
 		if !a.Start.Equal(b.Start) {
 			return a.Start.Before(b.Start)
 		}
+		if (a.Task == nil) != (b.Task == nil) {
+			return a.Task == nil
+		}
 		return a.Event.Title < b.Event.Title
 	})
-	return out
 }
 
 // Expand returns series start times whose occurrence could overlap [from, to).

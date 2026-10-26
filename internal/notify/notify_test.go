@@ -121,3 +121,27 @@ func TestFirstRunIsSilent(t *testing.T) {
 		t.Fatalf("reminder recorded on the first run was sent later (%d)", n)
 	}
 }
+
+func TestDueTasks(t *testing.T) {
+	now := time.Date(2026, 11, 2, 18, 30, 20, 0, time.Local)
+	tasks := []*model.Task{
+		{ID: "a", ProjectID: "p", Content: "Call mom", Due: &model.Due{Date: "2026-11-02T18:30:00"}},
+		{ID: "b", ProjectID: "p", Content: "Later", Due: &model.Due{Date: "2026-11-02T19:00:00"}},
+		{ID: "c", ProjectID: "p", Content: "Date only", Due: &model.Due{Date: "2026-11-02"}},
+		{ID: "d", ProjectID: "p", Content: "Done", Checked: true, Due: &model.Due{Date: "2026-11-02T18:00:00"}},
+		{ID: "e", ProjectID: "p", Content: "No due"},
+	}
+	names := map[string]string{"p": "Inbox"}
+	defs := remind.Defaults{Tasks: []time.Duration{0}}
+	got := DueTasks(tasks, names, defs, now)
+	if len(got) != 1 || got[0].Title != "☐ Call mom" || got[0].Body != "18:30 · due now · Inbox" {
+		t.Fatalf("at due time: %+v", got)
+	}
+	if got := DueTasks(tasks, names, defs, now.Add(-time.Minute)); len(got) != 0 {
+		t.Fatalf("before due time: %+v", got)
+	}
+	defs.TasksAllDay = []time.Duration{9 * time.Hour}
+	if got := DueTasks(tasks, names, defs, now); len(got) != 2 || got[1].Body != "Due today · Inbox" {
+		t.Fatalf("tasks_all_day: %+v", got)
+	}
+}

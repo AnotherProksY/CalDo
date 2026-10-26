@@ -7,6 +7,9 @@ import (
 	"strings"
 	"time"
 
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
+
 	"caldo/internal/model"
 	"caldo/internal/ui/theme"
 )
@@ -51,6 +54,9 @@ type Model struct {
 	agendaDays int
 	timeFmt    string
 	filter     string
+
+	// hits maps content cells to days and items; rebuilt by every Render.
+	hits []hitRect
 
 	// cache of occurrences for the visible range
 	cacheFrom, cacheTo time.Time
@@ -277,9 +283,58 @@ func (m *Model) Title() string {
 	return "Calendar · " + m.cursor.Format("January 2006")
 }
 
+// HitKind says what a content cell shows.
+type HitKind int
+
+const (
+	HitDay  HitKind = iota + 1 // a day in the month grid or a week column header
+	HitItem                    // an event or task in a list
+)
+
+// Hit is what lies under a content cell.
+type Hit struct {
+	Kind  HitKind
+	Day   time.Time
+	Index int // HitItem: index into the list the cursor moves over
+}
+
+type hitRect struct {
+	row, x0, x1 int
+	hit         Hit
+}
+
+func (m *Model) addHit(row, x0, x1 int, h Hit) {
+	m.hits = append(m.hits, hitRect{row, x0, x1, h})
+}
+
+// HitTest maps a cell of the last rendered content (0-based) to its target.
+func (m *Model) HitTest(x, y int) (Hit, bool) {
+	for _, r := range m.hits {
+		if r.row == y && x >= r.x0 && x < r.x1 {
+			return r.hit, true
+		}
+	}
+	return Hit{}, false
+}
+
+// Click moves the cursor to a hit: a day selects it, an item selects the item.
+func (m *Model) Click(h Hit) {
+	switch h.Kind {
+	case HitDay:
+		m.cursor, m.sel, m.listFocus = h.Day, 0, false
+	case HitItem:
+		if m.view != Agenda {
+			m.cursor = h.Day
+		}
+		m.sel, m.listFocus = h.Index, true
+	}
+	m.clampSel()
+}
+
 // Render returns the pane content lines for an inner area of w×h.
 func (m *Model) Render(w, h int, active bool) []string {
 	m.clampSel()
+	m.hits = m.hits[:0]
 	switch m.view {
 	case Week:
 		return m.renderWeek(w, h, active)
@@ -334,6 +389,7 @@ func (m *Model) renderMonth(w, h int, active bool) []string {
 		row := ""
 		for d := 0; d < 7; d++ {
 			day := start.AddDate(0, 0, wk*7+d)
+			m.addHit(len(lines), len(pad)+d*cw, len(pad)+(d+1)*cw, Hit{Kind: HitDay, Day: day})
 			mark := " "
 			if busy[day.Format(time.DateOnly)] {
 				mark = "•"
@@ -371,7 +427,7 @@ func (m *Model) renderMonth(w, h int, active bool) []string {
 	}
 	lines = append(lines, th.Rule(label, w, active && m.listFocus))
 	listH := h - len(lines)
-	lines = append(lines, m.renderEventList(m.dayOccurrences(m.cursor), w, listH, active && m.listFocus, false)...)
+	lines = append(lines, m.renderEventList(m.dayOccurrences(m.cursor), w, listH, active && m.listFocus, len(lines))...)
 	return lines
 }
 
@@ -383,6 +439,8 @@ func (m *Model) eventLine(o model.Occurrence, day time.Time, w int, selected, ac
 	switch {
 	case o.Event.AllDay:
 		when = "all day    "
+	case o.End.Equal(o.Start):
+		when = o.Start.Format(m.timeFmt) // a task due at a time
 	case !sameDay(o.Start, day):
 		when = "… " + o.End.Format(m.timeFmt) + "    "
 	case !sameDay(o.End, day) && o.End.After(day.AddDate(0, 0, 1)):
@@ -396,7 +454,7 @@ func (m *Model) eventLine(o model.Occurrence, day time.Time, w int, selected, ac
 		title = "(no title)"
 	}
 	var marks string
-	if o.IsRecurring() {
+	if o.IsRecurring() || (o.Task != nil && o.Task.Due.IsRecurring) {
 		marks += " ↻"
 	}
 	if o.Event.Dirty {
@@ -406,18 +464,37 @@ func (m *Model) eventLine(o model.Occurrence, day time.Time, w int, selected, ac
 		marks += " @ " + o.Event.Location
 	}
 	text := " " + when + " " + title
+	plainText := text
+	if o.Task != nil {
+		plainText = " " + when + " ☐ " + title
+		text = " " + when + " " + th.Faint.Render("☐ ") + m.priorityStyle(o.Task.Priority).Render(title)
+	}
 	content := theme.Fit(text+th.Faint.Render(marks), w-1)
 	if selected {
 		if active {
-			content = th.Selected.Render(theme.Fit(text+marks, w-1))
+			content = th.Selected.Render(theme.Fit(plainText+marks, w-1))
 		} else {
-			content = th.SelectedDim.Render(theme.Fit(text+marks, w-1))
+			content = th.SelectedDim.Render(theme.Fit(plainText+marks, w-1))
 		}
 	}
 	return bar + content
 }
 
-func (m *Model) renderEventList(list []model.Occurrence, w, h int, active, _ bool) []string {
+// priorityStyle colors task titles in the calendar like the task list does.
+func (m *Model) priorityStyle(p model.Priority) lipgloss.Style {
+	switch p.Display() {
+	case 1:
+		return m.th.P1
+	case 2:
+		return m.th.P2
+	case 3:
+		return m.th.P3
+	}
+	return lipgloss.NewStyle()
+}
+
+// renderEventList draws the day list starting at content row top.
+func (m *Model) renderEventList(list []model.Occurrence, w, h int, active bool, top int) []string {
 	if h <= 0 {
 		return nil
 	}
@@ -427,6 +504,7 @@ func (m *Model) renderEventList(list []model.Occurrence, w, h int, active, _ boo
 	m.scroll = scrollFor(m.sel, m.scroll, h, len(list))
 	var out []string
 	for i := m.scroll; i < len(list) && len(out) < h; i++ {
+		m.addHit(top+len(out), 0, w, Hit{Kind: HitItem, Day: m.cursor, Index: i})
 		out = append(out, m.eventLine(list[i], m.cursor, w, i == m.sel && m.ListFocused(), active))
 	}
 	return out
@@ -458,6 +536,8 @@ func (m *Model) renderWeek(w, h int, active bool) []string {
 			hdr = st.Render(hdr)
 		}
 		col := []string{hdr, th.BorderStyle.Render(strings.Repeat("─", colW))}
+		x0 := d * (colW + 1)
+		m.addHit(0, x0, x0+colW, Hit{Kind: HitDay, Day: day})
 		occ := m.dayOccurrences(day)
 		// Each event takes two lines (time, title) so narrow columns stay readable.
 		for i, o := range occ {
@@ -468,19 +548,29 @@ func (m *Model) renderWeek(w, h int, active bool) []string {
 					when = "… " + o.End.Format(m.timeFmt)
 				}
 			}
-			if o.IsRecurring() {
+			title := o.Event.Title
+			if o.Task != nil {
+				when += " ☐"
+				title = m.priorityStyle(o.Task.Priority).Render(title)
+			}
+			if o.IsRecurring() || (o.Task != nil && o.Task.Due.IsRecurring) {
 				when += " ↻"
 			}
 			bar := th.Fg(m.src.CalendarColor(o.Event.CalendarID)).Render("▌")
-			l1, l2 := theme.Fit(when, colW-1), theme.Fit(o.Event.Title, colW-1)
+			l1, l2 := theme.Fit(when, colW-1), theme.Fit(title, colW-1)
 			if day.Equal(m.cursor) && i == m.sel {
 				sel := th.SelectedDim
 				if active {
 					sel = th.Selected
 				}
-				l1, l2 = sel.Render(l1), sel.Render(l2)
+				l1, l2 = sel.Render(ansi.Strip(l1)), sel.Render(ansi.Strip(l2))
 			} else {
 				l1 = th.Faint.Render(l1)
+			}
+			for _, r := range []int{len(col), len(col) + 1} {
+				if r < h {
+					m.addHit(r, x0, x0+colW, Hit{Kind: HitItem, Day: day, Index: i})
+				}
 			}
 			col = append(col, bar+l1, bar+l2)
 		}
@@ -550,6 +640,7 @@ func (m *Model) renderAgenda(w, h int, active bool) []string {
 	var out []string
 	for i := m.scroll; i < len(rows) && len(out) < h; i++ {
 		if rows[i].idx >= 0 {
+			m.addHit(len(out), 0, w, Hit{Kind: HitItem, Index: rows[i].idx})
 			out = append(out, "  "+rows[i].text)
 		} else {
 			out = append(out, rows[i].text)

@@ -663,6 +663,18 @@ func (m *Model) helpDialog() dialog {
 			lines = append(lines, "  "+th.StatusKey.Render(theme.Fit(m.keys.keys(a[0]), 12))+" "+a[1])
 		}
 	}
+	if m.cfg.General.Mouse {
+		lines = append(lines, "", th.Header.Render("Mouse"))
+		for _, l := range [][2]string{
+			{"click", "focus pane, select day / item"},
+			{"double click", "open details"},
+			{"right click", "context menu"},
+			{"middle click", "task: complete · event: edit · day: add"},
+			{"wheel", "scroll lists · over the grid: change month"},
+		} {
+			lines = append(lines, "  "+th.StatusKey.Render(theme.Fit(l[0], 12))+" "+l[1])
+		}
+	}
 	return &textDialog{title: "Keys", lines: lines, width: 60}
 }
 

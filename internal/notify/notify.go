@@ -47,6 +47,59 @@ func Due(occs []model.Occurrence, defs remind.Defaults, now time.Time) []Notific
 	return out
 }
 
+// DueTasks lists reminders for open tasks whose time has come. The key holds
+// the due date, so a recurring task notifies again once Todoist moves it.
+func DueTasks(tasks []*model.Task, projects map[string]string, defs remind.Defaults, now time.Time) []Notification {
+	var out []Notification
+	for _, t := range tasks {
+		if t.Checked {
+			continue
+		}
+		at, hasTime, ok := t.Due.Time()
+		if !ok {
+			continue
+		}
+		offs := defs.Tasks
+		if !hasTime {
+			offs = defs.TasksAllDay
+			at = time.Date(at.Year(), at.Month(), at.Day(), 0, 0, 0, 0, time.Local)
+		}
+		for _, off := range offs {
+			fire := remind.FireTime(at, off, !hasTime)
+			if fire.After(now) || now.Sub(fire) >= maxDelay {
+				continue
+			}
+			when := "Due " + dayText(at, now)
+			if hasTime {
+				when = at.Format("15:04") + " · " + relativeDue(at.Sub(now))
+				if !sameDay(at, now) {
+					when = dayText(at, now) + " " + when
+				}
+			}
+			if p := projects[t.ProjectID]; p != "" {
+				when += " · " + p
+			}
+			out = append(out, Notification{
+				Key:   fmt.Sprintf("task|%s|%s|%d", t.ID, t.Due.Date, int(off/time.Minute)),
+				Title: "☐ " + t.Content,
+				Body:  when,
+			})
+		}
+	}
+	return out
+}
+
+func relativeDue(d time.Duration) string {
+	switch {
+	case d > 0:
+		return "in " + human(d+time.Minute-1)
+	case d > -time.Minute:
+		return "due now"
+	default:
+		return "overdue " + human(-d)
+	}
+}
+
 // Run shows every due reminder not shown before and returns how many it sent.
 func Run(st *store.Store, defs remind.Defaults, now time.Time, send func(Notification) error) (int, error) {
 	to := now.Add(remind.MaxLead + 48*time.Hour)
@@ -63,8 +116,21 @@ func Run(st *store.Store, defs remind.Defaults, now time.Time, send func(Notific
 	if initialized == "" {
 		send = func(Notification) error { return nil }
 	}
+	tasks, err := st.Tasks(false)
+	if err != nil {
+		return 0, err
+	}
+	projects, err := st.Projects()
+	if err != nil {
+		return 0, err
+	}
+	names := map[string]string{}
+	for _, p := range projects {
+		names[p.ID] = p.Name
+	}
+	due := append(Due(recur.Occurrences(events, now, to), defs, now), DueTasks(tasks, names, defs, now)...)
 	sent := 0
-	for _, n := range Due(recur.Occurrences(events, now, to), defs, now) {
+	for _, n := range due {
 		done, err := st.WasNotified(n.Key)
 		if err != nil {
 			return sent, err

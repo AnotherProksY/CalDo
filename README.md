@@ -4,10 +4,12 @@ A terminal calendar and task manager with two-way sync to **Google Calendar** an
 
 - Split screen: calendar on the left, tasks on the right. `Space` switches panes and `\` toggles between split and full screen.
 - You move a cursor over days and individual events or tasks, as in calcurse.
+- Tasks with a due date also show up in the calendar, colored by project. `e`, `x`, `d`, `m` and `p` act on the task when one is selected there.
 - Month grid with a day list, plus week and agenda views. Recurring events are supported, with "only this / this and following / all" edits.
 - The task list looks like taskbook: groups with `[done/total]`, `✔ ☐` icons, priorities and a completion summary.
 - Press `e` to edit any event or task in `$EDITOR` (vim/nvim) as a YAML frontmatter + Markdown document.
-- Desktop notifications for event reminders via `notify-send`, with separate defaults for timed and all-day events, overridable per event.
+- Desktop notifications via `notify-send`. Event reminders have separate defaults for timed and all-day events and can be overridden per event. Tasks notify at their due time.
+- Mouse support: click to focus a pane and select days, events or tasks; double-click opens details; right-click opens a context menu; middle-click completes a task, edits an event or adds an event on a day; the wheel scrolls lists or flips months over the grid.
 - Local-first: everything works offline. Changes are queued and pushed when you're back online. If an item changes in both places, the server version wins, and your version is kept under `C` (conflicts) so you can restore it.
 
 ## Build
@@ -28,6 +30,8 @@ make demo         # try it with sample data in a throwaway database
 4. Set `client_secret_file` under `[google]` in `~/.config/caldo/config.toml`. See `config.example.toml`.
 5. Run `caldo auth google`. A browser window opens for consent.
 
+By default every calendar in your Google account is synced. Use `calendars = [...]` to sync only the listed ones, or `exclude_calendars = [...]` to skip a few, for example the "Todoist" calendar created by Todoist's own Google integration, since CalDo already shows those tasks.
+
 Tokens are stored in the system keyring. If no keyring is available, they go in `~/.local/share/caldo/secrets.json` with mode 0600.
 
 `caldo sync` runs one sync cycle from the shell. The TUI syncs on start, every `sync.interval`, and when you press `r`.
@@ -35,6 +39,8 @@ Tokens are stored in the system keyring. If no keyring is available, they go in 
 ## Reminders and background sync
 
 Default reminders live under `[reminders]` in `config.toml` (see `config.example.toml`): `timed = ["10m"]` fires 10 minutes before an event, and `all_day = ["09:00"]` fires at 09:00 on the day (`"-1d 18:00"` means the day before at 18:00). To override them for one event, press `e` and set `reminders:` in the document to `default`, `none`, or a list such as `[10m, 1h]`. Reminders are stored only in CalDo; they are not synced to Google Calendar.
+
+Tasks notify at their due time (`tasks = ["0m"]`). Tasks due on a date without a time don't notify unless you set `tasks_all_day`, for example `["09:00"]`.
 
 `caldo notify` shows the reminders that are due and exits. Run it every minute from a systemd timer. `caldo sync` can also run in the background, and a lock file keeps it from overlapping with the TUI's own sync. The units in `contrib/systemd` expect the binary at `~/.local/bin/caldo`:
 

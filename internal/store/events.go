@@ -71,9 +71,17 @@ func (s *Store) SetCalendarEnabled(id string, enabled bool) error {
 	return err
 }
 
+// DeleteCalendar drops a calendar locally with its events and their queued
+// pushes (used when a calendar is removed remotely or excluded from sync).
 func (s *Store) DeleteCalendar(id string) error {
-	_, err := s.db.Exec(`DELETE FROM calendars WHERE id = ?`, id)
-	return err
+	return s.tx(func(tx *sql.Tx) error {
+		if _, err := tx.Exec(`DELETE FROM outbox WHERE entity_type = 'event' AND entity_id IN
+			(SELECT id FROM events WHERE calendar_id = ?)`, id); err != nil {
+			return err
+		}
+		_, err := tx.Exec(`DELETE FROM calendars WHERE id = ?`, id)
+		return err
+	})
 }
 
 func calendarProvider(q interface {

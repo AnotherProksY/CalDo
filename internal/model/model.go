@@ -83,6 +83,9 @@ type Occurrence struct {
 	Master *Event
 	// InstanceStart is the series slot this occurrence fills (original start).
 	InstanceStart time.Time
+	// Task is set when this item is a dated task shown in the calendar; Event
+	// is then a read-only view of it and actions must go to the task.
+	Task *Task
 }
 
 func (o Occurrence) IsRecurring() bool { return o.Master != nil }

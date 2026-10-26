@@ -4,13 +4,14 @@ import "time"
 
 func Default() *Config {
 	c := &Config{
-		General: General{Layout: "split", SplitRatio: 0.55},
+		General: General{Layout: "split", SplitRatio: 0.55, Mouse: true},
 		Calendar: CalendarConfig{
 			WeekStart:       "monday",
 			DefaultView:     "month",
 			AgendaDays:      14,
 			DefaultDuration: duration{time.Hour},
 			TimeFormat:      "15:04",
+			ShowTasks:       true,
 		},
 		Tasks:   TasksConfig{GroupBy: "project"},
 		Sync:    SyncConfig{Interval: duration{5 * time.Minute}},
@@ -19,6 +20,7 @@ func Default() *Config {
 		Reminders: RemindersConfig{
 			Timed:   []string{"10m"},
 			AllDay:  []string{"09:00"},
+			Tasks:   []string{"0m"},
 			Urgency: "critical",
 		},
 		Theme: Theme{

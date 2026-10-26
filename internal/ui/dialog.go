@@ -15,6 +15,17 @@ type dialog interface {
 	View(th *theme.Theme, maxW, maxH int) string
 }
 
+// anchoredDialog is drawn at a screen position (a context menu at the
+// pointer) instead of centered.
+type anchoredDialog interface {
+	Anchor() (x, y int, ok bool)
+}
+
+// clickDialog handles a left click on row y of its own box (0 = top border).
+type clickDialog interface {
+	Click(y int) (cmd tea.Cmd, done bool)
+}
+
 // msgDialog is a dialog that also wants non-key messages: pastes
 // (tea.PasteMsg, or the clipboard read behind ctrl+v) and cursor blinks.
 type msgDialog interface {
@@ -103,6 +114,18 @@ type choiceDialog struct {
 	options []string
 	sel     int
 	onPick  func(int) tea.Cmd
+	// menu: a compact context menu anchored at (x, y).
+	menu bool
+	x, y int
+}
+
+func (d *choiceDialog) Anchor() (int, int, bool) { return d.x, d.y, d.menu }
+
+func (d *choiceDialog) Click(y int) (tea.Cmd, bool) {
+	if i := y - 1; i >= 0 && i < len(d.options) {
+		return d.onPick(i), true
+	}
+	return nil, false
 }
 
 func (d *choiceDialog) Update(k tea.KeyPressMsg) (tea.Cmd, bool) {
@@ -126,6 +149,13 @@ func (d *choiceDialog) Update(k tea.KeyPressMsg) (tea.Cmd, bool) {
 
 func (d *choiceDialog) View(th *theme.Theme, maxW, maxH int) string {
 	w := dialogWidth(maxW, 50)
+	if d.menu {
+		w = theme.StringWidth(d.title) + 6
+		for _, o := range d.options {
+			w = max(w, theme.StringWidth(o)+6)
+		}
+		w = min(w, maxW)
+	}
 	var lines []string
 	for i, o := range d.options {
 		l := "  " + o

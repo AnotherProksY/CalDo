@@ -60,6 +60,8 @@ type Model struct {
 	rows   []row
 	cursor int // index into rows; always a task row when any exist
 	scroll int
+	// lineRows maps each rendered content line to a rows index (-1: none).
+	lineRows []int
 }
 
 func New(th *theme.Theme, groupBy GroupBy, showCompleted bool) Model {
@@ -106,6 +108,14 @@ func (m *Model) Selected() *model.Task {
 		return m.rows[m.cursor].task
 	}
 	return nil
+}
+
+// TaskAt returns the task drawn on content line y of the last Render.
+func (m *Model) TaskAt(y int) *model.Task {
+	if y < 0 || y >= len(m.lineRows) || m.lineRows[y] < 0 {
+		return nil
+	}
+	return m.rows[m.lineRows[y]].task
 }
 
 // Select moves the cursor to the task with id, if visible.
@@ -392,6 +402,7 @@ func (m *Model) Render(w, h int, active bool) []string {
 	footer := m.footer()
 	bodyH := h - len(footer) - 1
 	var lines []string
+	m.lineRows = m.lineRows[:0]
 	if len(m.rows) == 0 {
 		lines = append(lines, th.Faint.Render("  No tasks — press a to add one"))
 	} else {
@@ -429,6 +440,7 @@ func (m *Model) Render(w, h int, active bool) []string {
 		m.scroll = scrollFor(cur, min(m.scroll, anchor), bodyH, len(all))
 		for i := m.scroll; i < len(all) && len(lines) < bodyH; i++ {
 			lines = append(lines, all[i].text)
+			m.lineRows = append(m.lineRows, all[i].row)
 		}
 	}
 	for len(lines) < bodyH {

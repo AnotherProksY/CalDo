@@ -5,6 +5,7 @@
 editor = ""          # overrides $VISUAL / $EDITOR, e.g. "nvim"
 layout = "split"     # "split" or "full"
 split_ratio = 0.55   # calendar share of the width in split mode
+mouse = true         # clicks and wheel; hold Shift to select text in the terminal
 
 [calendar]
 week_start = "monday"     # or "sunday"
@@ -12,6 +13,7 @@ default_view = "month"    # "month", "week" or "agenda"
 agenda_days = 14
 default_duration = "1h"   # length of new timed events
 time_format = "15:04"
+show_tasks = true         # list tasks with a due date in the calendar
 
 [tasks]
 group_by = "project"      # "project", "date" or "label"
@@ -24,6 +26,7 @@ interval = "5m"
 # Desktop OAuth client JSON from Google Cloud Console (see README).
 client_secret_file = ""
 calendars = []            # names or ids to sync; empty = all
+exclude_calendars = []    # names or ids never synced, e.g. ["Todoist"]
 past_days = 365           # how far back the first full sync reaches
 
 [reminders]
@@ -31,6 +34,8 @@ past_days = 365           # how far back the first full sync reaches
 # Reminders are CalDo-only: they are not synced to Google Calendar.
 timed = ["10m"]           # before the start: "10m", "1h30m", "1d"
 all_day = ["09:00"]       # on the day at 09:00; "-1d 18:00" = the day before at 18:00
+tasks = ["0m"]            # tasks due at a time: "0m" = at the due time, "15m" = 15 min before
+tasks_all_day = []        # tasks due on a date only, e.g. ["09:00"]; empty = no notification
 urgency = "critical"      # notify-send urgency: "low", "normal" or "critical"
 
 [theme]

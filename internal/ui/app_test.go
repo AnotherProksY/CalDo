@@ -195,3 +195,124 @@ func TestPasteIntoInput(t *testing.T) {
 	}
 	t.Fatal("pasted text did not reach the quick-add input")
 }
+
+func TestTasksInCalendar(t *testing.T) {
+	m := newTestModel(t)
+	today := time.Now().Format("2006-01-02")
+	must(t, m.st.SaveTask(&model.Task{ProjectID: store.LocalInboxID, Content: "Pay rent", Priority: 4,
+		Due: &model.Due{Date: today}}))
+	must(t, m.st.SaveTask(&model.Task{ProjectID: store.LocalInboxID, Content: "Call mom",
+		Due: &model.Due{Date: today + "T18:30:00"}}))
+	m.Update(changed())
+
+	s := screen(m)
+	if !strings.Contains(s, "all day     ☐ Pay rent") || !strings.Contains(s, "18:30       ☐ Call mom") {
+		t.Fatalf("dated tasks should be listed in the day:\n%s", s)
+	}
+	press(m, "3") // agenda
+	if !strings.Contains(screen(m), "☐ Pay rent") {
+		t.Fatal("agenda should list tasks")
+	}
+	press(m, "2") // week
+	if !strings.Contains(screen(m), "☐") {
+		t.Fatal("week view should list tasks")
+	}
+
+	// Complete the all-day task from the calendar: it is the first item today.
+	press(m, "1", "tab")
+	o, ok := m.cal.Selected()
+	if !ok || o.Task == nil || o.Task.Content != "Pay rent" {
+		t.Fatalf("expected Pay rent selected, got %+v", o)
+	}
+	press(m, "x")
+	m.Update(changed())
+	if tk, _ := m.st.Task(o.Task.ID); !tk.Checked {
+		t.Fatal("x in the calendar should complete the task")
+	}
+	if s := screen(m); strings.Contains(s, "☐ Pay rent") {
+		t.Fatalf("completed task should leave the calendar:\n%s", s)
+	}
+
+	m.cfg.Calendar.ShowTasks = false
+	m.Update(changed())
+	if strings.Contains(screen(m), "18:30       ☐ Call mom") {
+		t.Fatal("show_tasks = false should hide tasks from the calendar")
+	}
+}
+
+// at finds text on the rendered screen and returns its cell coordinates.
+func at(t *testing.T, m *Model, text string) (int, int) {
+	t.Helper()
+	for y, l := range strings.Split(screen(m), "\n") {
+		if i := strings.Index(l, text); i >= 0 {
+			return theme.StringWidth(l[:i]), y
+		}
+	}
+	t.Fatalf("%q not on screen:\n%s", text, screen(m))
+	return 0, 0
+}
+
+func clickAt(m *Model, b tea.MouseButton, x, y int) {
+	m.Update(tea.MouseClickMsg{X: x, Y: y, Button: b})
+}
+
+func TestMouse(t *testing.T) {
+	m := newTestModel(t)
+	if m.View().MouseMode != tea.MouseModeCellMotion {
+		t.Fatal("mouse should be enabled by default")
+	}
+
+	// Left click on a task focuses the tasks pane and selects it.
+	x, y := at(t, m, "Buy milk")
+	clickAt(m, tea.MouseLeft, x, y)
+	if m.focus != paneTasks || m.tasks.Selected() == nil || m.tasks.Selected().Content != "Buy milk" {
+		t.Fatalf("click should select Buy milk in the tasks pane, focus=%v sel=%+v", m.focus, m.tasks.Selected())
+	}
+	// Double click opens its card; clicking outside closes it.
+	clickAt(m, tea.MouseLeft, x, y)
+	if m.dlg == nil || !strings.Contains(screen(m), "Task") {
+		t.Fatal("double click should open the task card")
+	}
+	clickAt(m, tea.MouseLeft, 0, 0)
+	if m.dlg != nil {
+		t.Fatal("click outside should close the dialog")
+	}
+
+	// Right click opens a context menu; clicking "Complete" completes the task.
+	m.lastClick = click{}
+	milk := m.tasks.Selected().ID
+	clickAt(m, tea.MouseRight, x, y)
+	if _, ok := m.dlg.(*choiceDialog); !ok {
+		t.Fatalf("right click should open a context menu, got %T", m.dlg)
+	}
+	if os.Getenv("CALDO_SHOW") != "" {
+		t.Log("\n" + screen(m))
+	}
+	cx, cy := at(t, m, "Complete")
+	clickAt(m, tea.MouseLeft, cx, cy)
+	m.Update(changed())
+	if tk, _ := m.st.Task(milk); tk == nil || !tk.Checked {
+		t.Fatal("menu Complete should complete the task")
+	}
+
+	// Click an event in the calendar: focus moves there and it is selected.
+	x, y = at(t, m, "Lunch")
+	clickAt(m, tea.MouseLeft, x, y)
+	if o, ok := m.cal.Selected(); m.focus != paneCalendar || !ok || o.Event.Title != "Lunch" {
+		t.Fatalf("click should select Lunch, focus=%v", m.focus)
+	}
+
+	// Wheel over the month grid flips months.
+	month := m.cal.Cursor().Month()
+	gx, gy := at(t, m, "Mo")
+	m.Update(tea.MouseWheelMsg{X: gx + 1, Y: gy + 1, Button: tea.MouseWheelDown})
+	if m.cal.Cursor().Month() == month {
+		t.Fatal("wheel over the grid should move to the next month")
+	}
+
+	// Middle click on a day opens quick add for that day.
+	clickAt(m, tea.MouseMiddle, gx+1, gy+1)
+	if _, ok := m.dlg.(*inputDialog); !ok {
+		t.Fatalf("middle click on a day should open quick add, got %T", m.dlg)
+	}
+}

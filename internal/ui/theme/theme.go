@@ -169,26 +169,35 @@ func (t *Theme) Rule(label string, w int, active bool) string {
 		t.BorderStyle.Render(strings.Repeat("─", w-lw-left))
 }
 
+// Size returns the width and height of a multi-line block in cells.
+func Size(s string) (w, h int) {
+	lines := strings.Split(s, "\n")
+	for _, l := range lines {
+		w = max(w, StringWidth(l))
+	}
+	return w, len(lines)
+}
+
 // Overlay draws fg centered over bg, cell-accurately.
 func Overlay(bg, fg string, width, height int) string {
+	fw, fh := Size(fg)
+	return OverlayAt(bg, fg, max(0, (width-fw)/2), max(0, (height-fh)/2), width, height)
+}
+
+// OverlayAt draws fg over bg with its top-left corner at (x, y).
+func OverlayAt(bg, fg string, x, y, width, height int) string {
 	bgLines := strings.Split(bg, "\n")
 	for len(bgLines) < height {
 		bgLines = append(bgLines, "")
 	}
 	fgLines := strings.Split(fg, "\n")
-	fw := 0
-	for _, l := range fgLines {
-		fw = max(fw, StringWidth(l))
-	}
-	x := max(0, (width-fw)/2)
-	y := max(0, (height-len(fgLines))/2)
 	for i, l := range fgLines {
 		row := y + i
 		if row >= len(bgLines) {
 			break
 		}
 		base := Fit(bgLines[row], width)
-		left := Truncate(base, x, "")
+		left := Fit(Truncate(base, x, ""), x) // pad if a wide char straddles x
 		right := WidthMethod.TruncateLeft(base, x+StringWidth(l), "")
 		bgLines[row] = left + "\x1b[0m" + l + "\x1b[0m" + right
 	}

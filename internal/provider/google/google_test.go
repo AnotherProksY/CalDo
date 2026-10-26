@@ -243,3 +243,34 @@ func must(t *testing.T, err error) {
 		t.Fatal(err)
 	}
 }
+
+func TestExcludeCalendarRemovesIt(t *testing.T) {
+	c, st, _ := setup(t)
+	ctx := context.Background()
+	if err := c.Sync(ctx); err != nil {
+		t.Fatal(err)
+	}
+	cal := primary(t, st)
+	ev, _ := st.EventByRemoteID(cal.ID, "single")
+	ev.Title = "edited, then excluded"
+	if err := st.SaveEvent(ev); err != nil {
+		t.Fatal(err)
+	}
+
+	c.cfg.ExcludeCalendars = []string{"me"} // names match case-insensitively
+	if err := c.Sync(ctx); err != nil {
+		t.Fatal(err)
+	}
+	cals, _ := st.Calendars()
+	for _, cl := range cals {
+		if cl.Provider == model.ProviderGoogle {
+			t.Fatalf("excluded calendar still present: %+v", cl)
+		}
+	}
+	if n := st.PendingCount(); n != 0 {
+		t.Fatalf("queued pushes for the excluded calendar left behind: %d", n)
+	}
+	if !c.wanted("other@example.com", "Other") || c.wanted("me@example.com", "Me") {
+		t.Fatal("wanted() should only drop excluded calendars")
+	}
+}

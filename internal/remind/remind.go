@@ -117,6 +117,9 @@ func FormatList(offs []time.Duration, allDay bool) []string {
 type Defaults struct {
 	Timed  []time.Duration
 	AllDay []time.Duration
+	// Tasks apply to tasks due at a time, TasksAllDay to date-only tasks.
+	Tasks       []time.Duration
+	TasksAllDay []time.Duration
 }
 
 // For returns the reminders that apply to an occurrence.

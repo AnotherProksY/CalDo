@@ -59,6 +59,10 @@ type Model struct {
 	syncErr     string
 
 	calColors map[string]string
+	// Geometry of the last frame, for mouse hit-testing.
+	layout    layout
+	dlgRect   rect
+	lastClick click
 	w, h      int
 }
 
@@ -90,7 +94,41 @@ func (m *Model) Occurrences(from, to time.Time) []model.Occurrence {
 		m.setError(err)
 		return nil
 	}
-	return recur.Occurrences(evs, from, to)
+	occs := recur.Occurrences(evs, from, to)
+	if m.cfg.Calendar.ShowTasks {
+		occs = append(occs, m.taskOccurrences(from, to)...)
+		recur.Sort(occs)
+	}
+	return occs
+}
+
+// taskOccurrences shows open tasks with a due date as calendar items: all-day
+// on their date, or as a point in time when the due date has a time.
+func (m *Model) taskOccurrences(from, to time.Time) []model.Occurrence {
+	ts, err := m.st.Tasks(false)
+	if err != nil {
+		m.setError(err)
+		return nil
+	}
+	var out []model.Occurrence
+	for _, t := range ts {
+		due, hasTime, ok := t.Due.Time()
+		if !ok {
+			continue
+		}
+		start, end := due, due
+		if !hasTime {
+			start = time.Date(due.Year(), due.Month(), due.Day(), 0, 0, 0, 0, time.Local)
+			end = start.AddDate(0, 0, 1)
+		}
+		if !start.Before(to) || (end.Before(from) || (end.Equal(from) && !end.Equal(start))) {
+			continue
+		}
+		ev := &model.Event{ID: "task:" + t.ID, CalendarID: t.ProjectID, Title: t.Content,
+			Description: t.Description, Start: start, End: end, AllDay: !hasTime, Dirty: t.Dirty}
+		out = append(out, model.Occurrence{Event: ev, Start: start, End: end, Task: t})
+	}
+	return out
 }
 
 func (m *Model) CalendarColor(id string) string { return m.calColors[id] }
@@ -120,6 +158,12 @@ func (m *Model) reload() {
 	if cals, err := m.st.Calendars(); err == nil {
 		for _, c := range cals {
 			m.calColors[c.ID] = c.Color
+		}
+	}
+	// Tasks in the calendar are colored by project; ids never collide.
+	if ps, err := m.st.Projects(); err == nil {
+		for _, p := range ps {
+			m.calColors[p.ID] = p.Color
 		}
 	}
 	m.cal.Invalidate()
@@ -239,6 +283,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, watchTick()
 
+	case tea.MouseClickMsg:
+		return m, m.handleClick(msg.Mouse())
+
+	case tea.MouseWheelMsg:
+		return m, m.handleWheel(msg.Mouse())
+
 	case tea.KeyPressMsg:
 		if m.dlg != nil {
 			cur := m.dlg
@@ -264,7 +314,11 @@ func (m *Model) handleKey(k tea.KeyPressMsg) tea.Cmd {
 		m.applyFilter("")
 		return nil
 	}
-	act := m.keys.action(key)
+	return m.action(m.keys.action(key))
+}
+
+// action runs a key-bound action; mouse handling reuses it.
+func (m *Model) action(act string) tea.Cmd {
 	switch act {
 	case config.ActQuit:
 		return tea.Quit
@@ -342,7 +396,11 @@ func (m *Model) calendarKey(act string) tea.Cmd {
 		c.ToggleSubFocus()
 	case config.ActOpen:
 		if o, ok := c.Selected(); ok {
-			m.dlg = m.eventDetail(o)
+			if o.Task != nil {
+				m.dlg = m.taskDetail(o.Task)
+			} else {
+				m.dlg = m.eventDetail(o)
+			}
 		} else {
 			c.FocusList()
 		}
@@ -350,18 +408,39 @@ func (m *Model) calendarKey(act string) tea.Cmd {
 		return m.quickAddEvent()
 	case config.ActAddFull:
 		return m.newEventInEditor()
-	case config.ActEdit:
-		if o, ok := c.Selected(); ok {
+	case config.ActEdit, config.ActDelete, config.ActPostpone, config.ActComplete, config.ActPriority:
+		o, ok := c.Selected()
+		if !ok {
+			return nil
+		}
+		if o.Task != nil {
+			return m.calendarTaskKey(act, o.Task)
+		}
+		switch act {
+		case config.ActEdit:
 			return m.editEvent(o)
-		}
-	case config.ActDelete:
-		if o, ok := c.Selected(); ok {
+		case config.ActDelete:
 			return m.deleteEvent(o)
-		}
-	case config.ActPostpone:
-		if o, ok := c.Selected(); ok {
+		case config.ActPostpone:
 			return m.moveEvent(o)
 		}
+	}
+	return nil
+}
+
+// calendarTaskKey runs task actions on a task selected in the calendar.
+func (m *Model) calendarTaskKey(act string, t *model.Task) tea.Cmd {
+	switch act {
+	case config.ActEdit:
+		return m.editTask(t)
+	case config.ActDelete:
+		return m.deleteTask(t)
+	case config.ActPostpone:
+		return m.rescheduleTask(t)
+	case config.ActComplete:
+		return m.toggleTask(t)
+	case config.ActPriority:
+		return m.cyclePriority(t)
 	}
 	return nil
 }
@@ -426,10 +505,15 @@ func (m *Model) View() tea.View {
 		v.SetContent("")
 		return v
 	}
+	if m.cfg.General.Mouse {
+		v.MouseMode = tea.MouseModeCellMotion
+	}
 	bodyH := m.h - 1
 	var body string
+	m.layout = layout{calW: m.w, tasksX: 0, tasksW: m.w}
 	if m.split && m.w >= 60 {
 		calW := int(float64(m.w) * m.cfg.General.SplitRatio)
+		m.layout = layout{split: true, calW: calW, tasksX: calW, tasksW: m.w - calW}
 		left := m.renderCalendar(calW, bodyH)
 		right := m.renderTasks(m.w-calW, bodyH)
 		body = joinColumns(left, right)
@@ -439,8 +523,19 @@ func (m *Model) View() tea.View {
 		body = m.renderTasks(m.w, bodyH)
 	}
 	screen := body + "\n" + m.statusBar()
+	m.dlgRect = rect{}
 	if m.dlg != nil {
-		screen = theme.Overlay(screen, m.dlg.View(m.th, m.w, m.h), m.w, m.h)
+		fg := m.dlg.View(m.th, m.w, m.h)
+		fw, fh := theme.Size(fg)
+		x, y := (m.w-fw)/2, (m.h-fh)/2
+		if a, ok := m.dlg.(anchoredDialog); ok {
+			if ax, ay, ok := a.Anchor(); ok {
+				x, y = ax, ay
+			}
+		}
+		x, y = max(0, min(x, m.w-fw)), max(0, min(y, m.h-fh))
+		m.dlgRect = rect{x, y, fw, fh}
+		screen = theme.OverlayAt(screen, fg, x, y, m.w, m.h)
 	}
 	v.SetContent(screen)
 	return v

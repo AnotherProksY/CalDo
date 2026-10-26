@@ -133,11 +133,13 @@ func (c *Client) syncCalendars(ctx context.Context) error {
 	return nil
 }
 
+// wanted applies the calendars / exclude_calendars config (names or ids).
 func (c *Client) wanted(id, name string) bool {
-	if len(c.cfg.Calendars) == 0 {
-		return true
+	match := func(s string) bool { return s == id || strings.EqualFold(s, name) }
+	if slices.ContainsFunc(c.cfg.ExcludeCalendars, match) {
+		return false
 	}
-	return slices.ContainsFunc(c.cfg.Calendars, func(s string) bool { return s == id || strings.EqualFold(s, name) })
+	return len(c.cfg.Calendars) == 0 || slices.ContainsFunc(c.cfg.Calendars, match)
 }
 
 // --- pull ----------------------------------------------------------------

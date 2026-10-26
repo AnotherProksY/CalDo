@@ -37,6 +37,8 @@ type General struct {
 	Layout string `toml:"layout"`
 	// SplitRatio is the calendar pane share of the width in split mode (0.2..0.8).
 	SplitRatio float64 `toml:"split_ratio"`
+	// Mouse enables clicks and the wheel (Shift+drag still selects text).
+	Mouse bool `toml:"mouse"`
 }
 
 type CalendarConfig struct {
@@ -48,6 +50,8 @@ type CalendarConfig struct {
 	// DefaultDuration of new timed events.
 	DefaultDuration duration `toml:"default_duration"`
 	TimeFormat      string   `toml:"time_format"`
+	// ShowTasks lists dated tasks in the calendar next to events.
+	ShowTasks bool `toml:"show_tasks"`
 }
 
 type TasksConfig struct {
@@ -65,6 +69,8 @@ type GoogleConfig struct {
 	ClientSecretFile string `toml:"client_secret_file"`
 	// Calendars restricts sync to these calendar names/ids; empty means all.
 	Calendars []string `toml:"calendars"`
+	// ExcludeCalendars are never synced, even when Calendars would include them.
+	ExcludeCalendars []string `toml:"exclude_calendars"`
 	// PastDays bounds how far back the initial full sync reaches.
 	PastDays int `toml:"past_days"`
 }
@@ -79,6 +85,10 @@ type RemindersConfig struct {
 	Timed []string `toml:"timed"`
 	// AllDay are clock times for all-day events ("09:00", "-1d 18:00").
 	AllDay []string `toml:"all_day"`
+	// Tasks are offsets before a task's due time ("0m" = at the due time).
+	Tasks []string `toml:"tasks"`
+	// TasksAllDay are clock times for tasks due on a date without a time.
+	TasksAllDay []string `toml:"tasks_all_day"`
 	// Urgency is passed to notify-send: "low", "normal" or "critical".
 	Urgency string `toml:"urgency"`
 }
@@ -159,6 +169,12 @@ func (c *Config) parseReminders() error {
 	}
 	if c.defaults.AllDay, err = remind.ParseList(c.Reminders.AllDay, true); err != nil {
 		return fmt.Errorf("reminders.all_day: %w", err)
+	}
+	if c.defaults.Tasks, err = remind.ParseList(c.Reminders.Tasks, false); err != nil {
+		return fmt.Errorf("reminders.tasks: %w", err)
+	}
+	if c.defaults.TasksAllDay, err = remind.ParseList(c.Reminders.TasksAllDay, true); err != nil {
+		return fmt.Errorf("reminders.tasks_all_day: %w", err)
 	}
 	return nil
 }

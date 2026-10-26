@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/BurntSushi/toml"
@@ -151,12 +152,25 @@ func (c *Config) normalize() {
 	if c.Todoist.BaseURL == "" {
 		c.Todoist.BaseURL = d.Todoist.BaseURL
 	}
+	c.Google.ClientSecretFile = expandHome(c.Google.ClientSecretFile)
 	// User key bindings replace defaults per action; untouched actions keep defaults.
 	keys := DefaultKeys()
 	for action, ks := range c.Keys {
 		keys[action] = ks
 	}
 	c.Keys = keys
+}
+
+// expandHome resolves a leading "~/" against the user's home directory.
+func expandHome(p string) string {
+	if p != "~" && !strings.HasPrefix(p, "~/") {
+		return p
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return p
+	}
+	return filepath.Join(home, p[1:])
 }
 
 func (c *Config) SyncInterval() time.Duration { return c.Sync.Interval.Duration }

@@ -81,6 +81,7 @@ func New(cfg *config.Config, st *store.Store, syncer Syncer) *Model {
 		split:  cfg.General.Layout != "full",
 	}
 	m.cal = calendar.New(m, th, calendar.ParseView(cfg.Calendar.DefaultView), ws, cfg.Calendar.AgendaDays, cfg.Calendar.TimeFormat)
+	m.cal.DimPast = cfg.Calendar.DimPast
 	m.tasks = tasks.New(th, tasks.ParseView(cfg.Tasks.DefaultView), [3]tasks.GroupBy{
 		tasks.ParseGroupBy(cfg.Tasks.GroupToday),
 		tasks.ParseGroupBy(cfg.Tasks.GroupUpcoming),
@@ -196,6 +197,7 @@ func (m *Model) setMessage(s string) {
 }
 
 func (m *Model) Init() tea.Cmd {
+	m.cal.SelectNow()
 	m.dataVersion, _ = m.st.DataVersion()
 	cmds := []tea.Cmd{watchTick()}
 	if m.syncer != nil && m.syncer.Enabled() {

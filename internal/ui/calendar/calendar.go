@@ -58,6 +58,10 @@ type Model struct {
 	// hits maps content cells to days and items; rebuilt by every Render.
 	hits []hitRect
 
+	// DimPast greys out events that have already ended.
+	DimPast bool
+	now     func() time.Time
+
 	// cache of occurrences for the visible range
 	cacheFrom, cacheTo time.Time
 	cache              []model.Occurrence
@@ -78,9 +82,49 @@ func today() time.Time {
 	return time.Date(n.Year(), n.Month(), n.Day(), 0, 0, 0, 0, time.Local)
 }
 
-func (m *Model) SetSize(w, h int)   { m.w, m.h = w, h }
+func (m *Model) SetSize(w, h int) { m.w, m.h = w, h }
+
+// isPast reports an event that has ended. Tasks never count: an overdue task
+// still needs doing.
+func (m *Model) isPast(o model.Occurrence) bool {
+	if !m.DimPast || o.Task != nil {
+		return false
+	}
+	return !o.End.After(m.clock())
+}
+
+func (m *Model) clock() time.Time {
+	if m.now != nil {
+		return m.now()
+	}
+	return time.Now()
+}
+
+// SelectNow puts the list cursor on the item that is on now or comes next,
+// skipping today's all-day items; if everything today is over, on the last.
+func (m *Model) SelectNow() {
+	m.sel, m.scroll = 0, 0
+	if !m.cursor.Equal(today()) {
+		return
+	}
+	now := m.clock()
+	last := -1
+	for i, o := range m.currentList() {
+		if o.Event.AllDay && !o.Start.After(now) {
+			continue
+		}
+		if o.End.After(now) || (o.End.Equal(o.Start) && !o.Start.Before(now)) {
+			m.sel = i
+			return
+		}
+		last = i
+	}
+	if last >= 0 {
+		m.sel = last
+	}
+}
 func (m *Model) Invalidate()        { m.cacheValid = false }
-func (m *Model) SetView(v View)     { m.view, m.sel, m.scroll = v, 0, 0; m.clampSel() }
+func (m *Model) SetView(v View)     { m.view = v; m.SelectNow() }
 func (m Model) CurrentView() View   { return m.view }
 func (m Model) Cursor() time.Time   { return m.cursor }
 func (m *Model) SetFilter(f string) { m.filter = strings.ToLower(f); m.Invalidate(); m.clampSel() }
@@ -188,7 +232,7 @@ func (m *Model) weekOf(t time.Time) time.Time {
 
 func (m *Model) moveDays(n int) {
 	m.cursor = m.cursor.AddDate(0, 0, n)
-	m.sel, m.scroll = 0, 0
+	m.SelectNow()
 }
 
 func (m *Model) Left() {
@@ -224,7 +268,7 @@ func (m *Model) Bottom() { m.sel = max(0, len(m.currentList())-1) }
 
 func (m *Model) Today() {
 	m.cursor = today()
-	m.sel, m.scroll = 0, 0
+	m.SelectNow()
 }
 
 func (m *Model) Period(dir int) {
@@ -235,7 +279,7 @@ func (m *Model) Period(dir int) {
 		m.moveDays(m.agendaDays * dir)
 	default:
 		m.cursor = m.cursor.AddDate(0, dir, 0)
-		m.sel, m.scroll = 0, 0
+		m.SelectNow()
 	}
 }
 
@@ -321,7 +365,8 @@ func (m *Model) HitTest(x, y int) (Hit, bool) {
 func (m *Model) Click(h Hit) {
 	switch h.Kind {
 	case HitDay:
-		m.cursor, m.sel, m.listFocus = h.Day, 0, false
+		m.cursor, m.listFocus = h.Day, false
+		m.SelectNow()
 	case HitItem:
 		if m.view != Agenda {
 			m.cursor = h.Day
@@ -470,6 +515,10 @@ func (m *Model) eventLine(o model.Occurrence, day time.Time, w int, selected, ac
 		text = " " + when + " " + th.Faint.Render("☐ ") + m.priorityStyle(o.Task.Priority).Render(title)
 	}
 	content := theme.Fit(text+th.Faint.Render(marks), w-1)
+	if m.isPast(o) {
+		bar = th.Fg(m.src.CalendarColor(o.Event.CalendarID)).Faint(true).Render("▌")
+		content = th.Faint.Render(theme.Fit(plainText+marks, w-1))
+	}
 	if selected {
 		if active {
 			content = th.Selected.Render(theme.Fit(plainText+marks, w-1))
@@ -566,6 +615,10 @@ func (m *Model) renderWeek(w, h int, active bool) []string {
 				l1, l2 = sel.Render(ansi.Strip(l1)), sel.Render(ansi.Strip(l2))
 			} else {
 				l1 = th.Faint.Render(l1)
+				if m.isPast(o) {
+					bar = th.Fg(m.src.CalendarColor(o.Event.CalendarID)).Faint(true).Render("▌")
+					l2 = th.Faint.Render(ansi.Strip(l2))
+				}
 			}
 			for _, r := range []int{len(col), len(col) + 1} {
 				if r < h {

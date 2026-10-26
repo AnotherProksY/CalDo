@@ -14,6 +14,7 @@ agenda_days = 14
 default_duration = "1h"   # length of new timed events
 time_format = "15:04"
 show_tasks = true         # list tasks with a due date in the calendar
+dim_past = true           # grey out events that have already ended
 
 [tasks]
 default_view = "today"    # "today", "upcoming" or "all" (keys 1/2/3 in the tasks pane)
@@ -53,6 +54,10 @@ pending = "#bb9af7"
 warning = "#e0af68"
 danger = "#f7768e"
 selection = "#283457"
+selection_fg = ""         # text color of the selected row; empty keeps it
+p1 = ""                   # priority colors; empty = danger, warning, accent
+p2 = ""
+p3 = ""
 
 # Rebind any action; listed actions replace their defaults.
 # Key names follow Bubble Tea: "space", "enter", "tab", "ctrl+n", "left", "pgdown"…

@@ -12,6 +12,7 @@ func Default() *Config {
 			DefaultDuration: duration{time.Hour},
 			TimeFormat:      "15:04",
 			ShowTasks:       true,
+			DimPast:         true,
 		},
 		Tasks: TasksConfig{
 			DefaultView:   "today",

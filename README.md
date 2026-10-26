@@ -4,6 +4,8 @@ A terminal calendar and task manager with two-way sync to **Google Calendar** an
 
 - Split screen: calendar on the left, tasks on the right. `Space` switches panes and `\` toggles between split and full screen.
 - You move a cursor over days and individual events or tasks, as in calcurse.
+- On today, the cursor starts on the event that is happening now or comes next.
+- Events that have already ended are greyed out (`calendar.dim_past`), so upcoming ones stand out.
 - Tasks with a due date also show up in the calendar, colored by project. `e`, `x`, `d`, `m` and `p` act on the task when one is selected there.
 - Month grid with a day list, plus week and agenda views. Recurring events are supported, with "only this / this and following / all" edits.
 - Three task views: **Today** (overdue and due today), **Upcoming** (dated tasks, one group per day) and **All**. Each view remembers its own grouping.

@@ -222,7 +222,7 @@ func TestTasksInCalendar(t *testing.T) {
 	}
 
 	// Complete the all-day task from the calendar: it is the first item today.
-	press(m, "1", "tab")
+	press(m, "1", "tab", "g")
 	o, ok := m.cal.Selected()
 	if !ok || o.Task == nil || o.Task.Content != "Pay rent" {
 		t.Fatalf("expected Pay rent selected, got %+v", o)

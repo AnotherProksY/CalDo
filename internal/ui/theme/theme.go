@@ -56,6 +56,9 @@ func New(c config.Theme) *Theme {
 	t.Bold = s().Bold(true)
 	t.Header = s().Foreground(t.Accent).Bold(true).Underline(true)
 	t.Selected = s().Background(t.Selection).Bold(true)
+	if c.SelectionFg != "" {
+		t.Selected = t.Selected.Foreground(lipgloss.Color(c.SelectionFg))
+	}
 	t.SelectedDim = s().Underline(true)
 	t.TodayStyle = s().Foreground(t.Today).Bold(true)
 	t.Done = s().Foreground(t.Muted).Strikethrough(true)
@@ -66,10 +69,17 @@ func New(c config.Theme) *Theme {
 	t.StatusBar = s().Foreground(t.Muted)
 	t.StatusKey = s().Foreground(t.Accent).Bold(true)
 	t.ErrorText = s().Foreground(t.Danger).Bold(true)
-	t.P1 = s().Foreground(t.Danger).Bold(true)
-	t.P2 = s().Foreground(t.Warning)
-	t.P3 = s().Foreground(t.Accent)
+	t.P1 = s().Foreground(orColor(c.P1, t.Danger)).Bold(true)
+	t.P2 = s().Foreground(orColor(c.P2, t.Warning))
+	t.P3 = s().Foreground(orColor(c.P3, t.Accent))
 	return t
+}
+
+func orColor(hex string, fallback color.Color) color.Color {
+	if hex == "" {
+		return fallback
+	}
+	return lipgloss.Color(hex)
 }
 
 // Fg returns a foreground style for a hex color, falling back to accent.

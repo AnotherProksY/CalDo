@@ -52,6 +52,8 @@ type CalendarConfig struct {
 	TimeFormat      string   `toml:"time_format"`
 	// ShowTasks lists dated tasks in the calendar next to events.
 	ShowTasks bool `toml:"show_tasks"`
+	// DimPast greys out events that have already ended.
+	DimPast bool `toml:"dim_past"`
 }
 
 type TasksConfig struct {
@@ -109,6 +111,12 @@ type Theme struct {
 	Warning   string `toml:"warning"`
 	Danger    string `toml:"danger"`
 	Selection string `toml:"selection"`
+	// SelectionFg colors the selected row's text; empty keeps the text color.
+	SelectionFg string `toml:"selection_fg"`
+	// P1..P3 color task priorities; empty means danger, warning, accent.
+	P1 string `toml:"p1"`
+	P2 string `toml:"p2"`
+	P3 string `toml:"p3"`
 }
 
 // duration lets TOML hold values like "15m".

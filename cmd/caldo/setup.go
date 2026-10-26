@@ -31,7 +31,7 @@ func setupMarker(paths config.Paths) string {
 }
 
 // maybeRunSetup runs the first-run setup before the TUI starts: Todoist
-// token first, then the Google browser consent.
+// token, then the Google browser consent, then background jobs.
 func maybeRunSetup(cfg *config.Config, paths config.Paths) error {
 	marker := setupMarker(paths)
 	if _, err := os.Stat(marker); err == nil || !term.IsTerminal(int(os.Stdin.Fd())) {
@@ -56,7 +56,7 @@ func runSetup(cfg *config.Config, paths config.Paths, secrets *auth.Secrets, has
 		"Everything works offline too: press Enter to skip a step and connect it later with `caldo auth`.\n\n")
 	usedFile := false
 
-	fmt.Println("1/2  Todoist")
+	fmt.Println("1/3  Todoist")
 	if hasTodoist {
 		fmt.Print("  Already connected.\n\n")
 	} else {
@@ -72,7 +72,7 @@ func runSetup(cfg *config.Config, paths config.Paths, secrets *auth.Secrets, has
 		fmt.Println()
 	}
 
-	fmt.Println("2/2  Google Calendar")
+	fmt.Println("2/3  Google Calendar")
 	switch {
 	case hasGoogle:
 		fmt.Print("  Already connected.\n\n")
@@ -97,6 +97,29 @@ func runSetup(cfg *config.Config, paths config.Paths, secrets *auth.Secrets, has
 		}
 		usedFile = usedFile || f
 		fmt.Print("  Google Calendar connected.\n\n")
+	}
+
+	fmt.Println("3/3  Background sync and reminders")
+	switch {
+	case !serviceSupported():
+		fmt.Print("  Not supported on this system.\n\n")
+	case serviceInstalled():
+		fmt.Print("  Already enabled.\n\n")
+	default:
+		fmt.Print("  Sync every 15 minutes and show reminders while CalDo is closed? [Y/n] ")
+		line, err := stdin.ReadString('\n')
+		if err != nil {
+			return err
+		}
+		if a := strings.ToLower(strings.TrimSpace(line)); a == "n" || a == "no" {
+			fmt.Print("  Skipped. Enable later with `caldo service install`.\n\n")
+			break
+		}
+		if err := installService(); err != nil {
+			fmt.Printf("  Could not enable it: %v\n\n", err)
+			break
+		}
+		fmt.Print("  Enabled.\n\n")
 	}
 
 	if usedFile {

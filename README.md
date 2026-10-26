@@ -48,14 +48,14 @@ Default reminders live under `[reminders]` in `config.toml` (see `config.example
 
 Tasks notify at their due time (`tasks = ["0m"]`). Tasks due on a date without a time don't notify unless you set `tasks_all_day`, for example `["09:00"]`.
 
-`caldo notify` shows the reminders that are due and exits. Run it every minute from a systemd timer. `caldo sync` can also run in the background, and a lock file keeps it from overlapping with the TUI's own sync. The units in `contrib/systemd` expect the binary at `~/.local/bin/caldo`:
+`caldo notify` shows the reminders that are due and exits (with `notify-send` on Linux, `osascript` on macOS). `caldo sync` runs one sync cycle; a lock file keeps it from overlapping with the TUI's own sync. To run both in the background, notify every minute and sync every 15 minutes, use:
 
 ```sh
-ln -s ~/Dev/CalDo/bin/caldo ~/.local/bin/caldo
-cp contrib/systemd/caldo-* ~/.config/systemd/user/
-systemctl --user daemon-reload
-systemctl --user enable --now caldo-notify.timer caldo-sync.timer
+caldo service install     # systemd user timers on Linux, launchd agents on macOS
+caldo service uninstall
 ```
+
+The first-run setup offers to do this for you.
 
 The first `caldo notify` run is silent. It only records the reminders that are already due, so enabling the timer does not replay everything from earlier today.
 

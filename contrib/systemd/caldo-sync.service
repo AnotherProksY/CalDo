@@ -1,7 +1,0 @@
-[Unit]
-Description=CalDo sync with Google Calendar and Todoist
-After=network-online.target
-
-[Service]
-Type=oneshot
-ExecStart=%h/.local/bin/caldo sync

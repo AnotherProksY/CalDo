@@ -22,7 +22,9 @@ Commands:
   auth todoist    connect Todoist (paste your API token)
   sync            run one sync cycle and exit
   notify          show desktop notifications for due reminders and exit
-                  (run every minute from a timer, see contrib/systemd)
+  service install|uninstall
+                  run notify every minute and sync every 15 minutes in the
+                  background (systemd user timers / launchd agents)
   demo            fill the database with sample data (use with --db)
 
 Flags:
@@ -81,6 +83,10 @@ func main() {
 		}
 	case "notify":
 		if err := runNotify(cfg, st); err != nil {
+			fatal(err)
+		}
+	case "service":
+		if err := runService(args[1:]); err != nil {
 			fatal(err)
 		}
 	default:

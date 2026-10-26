@@ -199,7 +199,9 @@ func (m *Model) setMessage(s string) {
 func (m *Model) Init() tea.Cmd {
 	m.cal.SelectNow()
 	m.dataVersion, _ = m.st.DataVersion()
-	cmds := []tea.Cmd{watchTick()}
+	// Re-check the size once the resize listener is up: a tiling WM can
+	// resize the terminal between the initial size read and SIGWINCH setup.
+	cmds := []tea.Cmd{tea.RequestWindowSize, watchTick()}
 	if m.syncer != nil && m.syncer.Enabled() {
 		cmds = append(cmds, m.startSync())
 	}

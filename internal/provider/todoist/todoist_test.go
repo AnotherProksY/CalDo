@@ -45,6 +45,10 @@ func (f *fakeServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	r.ParseForm()
+	if r.Form.Get("resource_types") == `["user"]` {
+		w.Write([]byte(`{"sync_token":"t1","user":{"full_name":"Test User","email":"t@example.com"}}`))
+		return
+	}
 	resp := syncResponse{SyncToken: "t1", SyncStatus: map[string]json.RawMessage{}, TempIDMapping: map[string]string{}}
 	if c := r.Form.Get("commands"); c != "" {
 		var cmds []command
@@ -102,6 +106,18 @@ func setup(t *testing.T) (*Client, *store.Store, *fakeServer) {
 	srv := httptest.NewServer(f)
 	t.Cleanup(srv.Close)
 	return New(srv.URL, "tok", srv.Client(), st), st, f
+}
+
+func TestUserChecksToken(t *testing.T) {
+	c, _, _ := setup(t)
+	name, err := c.User(context.Background())
+	if err != nil || name != "Test User" {
+		t.Fatalf("User() = %q, %v", name, err)
+	}
+	bad := New(c.base, "wrong", c.http, nil)
+	if _, err := bad.User(context.Background()); !Rejected(err) {
+		t.Fatalf("expected a rejected token, got %v", err)
+	}
 }
 
 func TestPullCreatesProjectsAndTasks(t *testing.T) {

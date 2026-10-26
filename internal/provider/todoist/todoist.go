@@ -11,6 +11,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -129,6 +130,42 @@ func (c *Client) call(ctx context.Context, token string, cmds []command) (*syncR
 		form.Set("sync_token", token)
 		form.Set("resource_types", `["projects","sections","labels","items"]`)
 	}
+	body, err := c.post(ctx, form)
+	if err != nil {
+		return nil, err
+	}
+	var out syncResponse
+	if err := json.Unmarshal(body, &out); err != nil {
+		return nil, fmt.Errorf("todoist: decode response: %w", err)
+	}
+	return &out, nil
+}
+
+// User fetches the account's name, which also checks that the token works.
+func (c *Client) User(ctx context.Context) (string, error) {
+	form := url.Values{}
+	form.Set("sync_token", "*")
+	form.Set("resource_types", `["user"]`)
+	body, err := c.post(ctx, form)
+	if err != nil {
+		return "", err
+	}
+	var out struct {
+		User struct {
+			FullName string `json:"full_name"`
+			Email    string `json:"email"`
+		} `json:"user"`
+	}
+	if err := json.Unmarshal(body, &out); err != nil {
+		return "", fmt.Errorf("todoist: decode response: %w", err)
+	}
+	if out.User.FullName != "" {
+		return out.User.FullName, nil
+	}
+	return out.User.Email, nil
+}
+
+func (c *Client) post(ctx context.Context, form url.Values) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.base+"/sync", strings.NewReader(form.Encode()))
 	if err != nil {
 		return nil, err
@@ -147,11 +184,13 @@ func (c *Client) call(ctx context.Context, token string, cmds []command) (*syncR
 	if resp.StatusCode != http.StatusOK {
 		return nil, &HTTPError{Status: resp.StatusCode, Body: string(bytes.TrimSpace(body))}
 	}
-	var out syncResponse
-	if err := json.Unmarshal(body, &out); err != nil {
-		return nil, fmt.Errorf("todoist: decode response: %w", err)
-	}
-	return &out, nil
+	return body, nil
+}
+
+// Rejected reports whether err means the token is invalid.
+func Rejected(err error) bool {
+	var he *HTTPError
+	return errors.As(err, &he) && (he.Status == http.StatusUnauthorized || he.Status == http.StatusForbidden)
 }
 
 type HTTPError struct {

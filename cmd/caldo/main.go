@@ -17,7 +17,7 @@ import (
 const usage = `Usage: caldo [flags] [command]
 
 Commands:
-  (none)          start the TUI
+  (none)          start the TUI (the first run asks to connect Todoist and Google)
   auth google     connect Google Calendar (opens a browser)
   auth todoist    connect Todoist (paste your API token)
   sync            run one sync cycle and exit
@@ -59,6 +59,9 @@ func main() {
 	}
 	switch cmd {
 	case "":
+		if err := maybeRunSetup(cfg, paths); err != nil {
+			fatal(err)
+		}
 		runTUI(cfg, st, paths)
 	case "demo":
 		if err := seedDemo(st); err != nil {

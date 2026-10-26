@@ -24,6 +24,8 @@ make demo         # try it with sample data in a throwaway database
 
 ## Connect services
 
+The first time you start `caldo`, it asks for your Todoist API token and then opens Google sign-in in your browser. Either step can be skipped and done later with the commands below.
+
 **Todoist:** run `caldo auth todoist` and paste your API token from *Settings → Integrations → Developer*.
 
 **Google Calendar:** run `caldo auth google`. A browser window opens for consent. Release binaries include CalDo's OAuth client, so nothing else is needed.

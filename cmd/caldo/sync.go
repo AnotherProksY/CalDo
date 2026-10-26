@@ -1,18 +1,14 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"golang.org/x/oauth2"
-	"golang.org/x/term"
 	"google.golang.org/api/option"
 
 	"caldo/internal/auth"
@@ -62,38 +58,14 @@ func runAuth(provider string, cfg *config.Config, paths config.Paths) error {
 	var usedFile bool
 	switch provider {
 	case "todoist":
-		fmt.Print("Todoist API token (Settings → Integrations → Developer): ")
-		var tok string
-		if term.IsTerminal(int(os.Stdin.Fd())) {
-			b, err := term.ReadPassword(int(os.Stdin.Fd()))
-			fmt.Println()
-			if err != nil {
-				return err
-			}
-			tok = string(b)
-		} else {
-			line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
-			tok = line
-		}
-		tok = strings.TrimSpace(tok)
-		if tok == "" {
-			return errors.New("empty token")
-		}
+		fmt.Println(todoistTokenHelp)
 		var err error
-		if usedFile, err = secrets.Set(auth.KeyTodoistToken, tok); err != nil {
+		if _, usedFile, err = connectTodoist(cfg, secrets, false); err != nil {
 			return err
 		}
-		fmt.Println("Todoist connected.")
 	case "google":
-		oc, err := auth.GoogleConfig(cfg.Google.ClientSecretFile)
-		if err != nil {
-			return err
-		}
-		tok, err := auth.GoogleLogin(context.Background(), oc, func(s string) { fmt.Println(s) })
-		if err != nil {
-			return err
-		}
-		if usedFile, err = auth.SaveGoogleToken(secrets, tok); err != nil {
+		var err error
+		if usedFile, err = connectGoogle(cfg, secrets); err != nil {
 			return err
 		}
 		fmt.Println("Google Calendar connected.")

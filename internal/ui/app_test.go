@@ -115,7 +115,7 @@ func TestEventCursorAndViews(t *testing.T) {
 	if o, _ := m.cal.Selected(); o.Event.Title != "Lunch" {
 		t.Fatalf("j should move to Lunch, got %q", o.Event.Title)
 	}
-	for _, v := range []string{"2", "3"} {
+	for _, v := range []string{"2", "3", "4"} {
 		press(m, v)
 		s := screen(m)
 		if os.Getenv("CALDO_SHOW") != "" {
@@ -170,7 +170,7 @@ func TestEmojiWidths(t *testing.T) {
 	for _, method := range []ansi.Method{ansi.WcWidth, ansi.GraphemeWidth} {
 		theme.WidthMethod = method
 		m.Update(changed())
-		for _, view := range []string{"1", "2", "3"} {
+		for _, view := range []string{"1", "2", "3", "4"} {
 			press(m, view)
 			sc := screen(m)
 			if strings.Contains(sc, "\uFE0F") {
@@ -209,14 +209,14 @@ func TestTasksInCalendar(t *testing.T) {
 	m.Update(changed())
 
 	s := screen(m)
-	if !strings.Contains(s, "all day     ☐ Pay rent") || !strings.Contains(s, "18:30       ☐ Call mom") {
+	if !strings.Contains(s, "all-day ▌ ☐ Pay rent") || !strings.Contains(s, "▌ 18:30") || !strings.Contains(s, "▌ ☐ Call mom") {
 		t.Fatalf("dated tasks should be listed in the day:\n%s", s)
 	}
-	press(m, "3") // agenda
+	press(m, "4") // agenda
 	if !strings.Contains(screen(m), "☐ Pay rent") {
 		t.Fatal("agenda should list tasks")
 	}
-	press(m, "2") // week
+	press(m, "3") // week
 	if !strings.Contains(screen(m), "☐") {
 		t.Fatal("week view should list tasks")
 	}

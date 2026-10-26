@@ -13,6 +13,9 @@ import (
 
 type Theme struct {
 	Accent, Muted, Border, Today, Success, Pending, Warning, Danger, Selection color.Color
+	// Background is the terminal background, which Tint mixes into. The UI
+	// asks the terminal for it; black until it answers.
+	Background color.Color
 
 	Title       lipgloss.Style
 	TitleActive lipgloss.Style
@@ -37,15 +40,16 @@ type Theme struct {
 
 func New(c config.Theme) *Theme {
 	t := &Theme{
-		Accent:    lipgloss.Color(c.Accent),
-		Muted:     lipgloss.Color(c.Muted),
-		Border:    lipgloss.Color(c.Border),
-		Today:     lipgloss.Color(c.Today),
-		Success:   lipgloss.Color(c.Success),
-		Pending:   lipgloss.Color(c.Pending),
-		Warning:   lipgloss.Color(c.Warning),
-		Danger:    lipgloss.Color(c.Danger),
-		Selection: lipgloss.Color(c.Selection),
+		Accent:     lipgloss.Color(c.Accent),
+		Muted:      lipgloss.Color(c.Muted),
+		Border:     lipgloss.Color(c.Border),
+		Today:      lipgloss.Color(c.Today),
+		Success:    lipgloss.Color(c.Success),
+		Pending:    lipgloss.Color(c.Pending),
+		Warning:    lipgloss.Color(c.Warning),
+		Danger:     lipgloss.Color(c.Danger),
+		Selection:  lipgloss.Color(c.Selection),
+		Background: color.Black,
 	}
 	s := lipgloss.NewStyle
 	t.Title = s().Foreground(t.Muted).Bold(true)
@@ -88,6 +92,23 @@ func (t *Theme) Fg(hex string) lipgloss.Style {
 		return lipgloss.NewStyle().Foreground(t.Accent)
 	}
 	return lipgloss.NewStyle().Foreground(lipgloss.Color(hex))
+}
+
+// Tint mixes a hex color (accent when empty) over the background: alpha 1
+// is the color itself, 0 the background.
+func (t *Theme) Tint(hex string, alpha float64) color.Color {
+	if hex == "" {
+		return t.TintColor(t.Accent, alpha)
+	}
+	return t.TintColor(lipgloss.Color(hex), alpha)
+}
+
+// TintColor is Tint for a color value.
+func (t *Theme) TintColor(c color.Color, alpha float64) color.Color {
+	r1, g1, b1, _ := c.RGBA()
+	r2, g2, b2, _ := t.Background.RGBA()
+	mix := func(x, y uint32) uint8 { return uint8((float64(x)*alpha + float64(y)*(1-alpha)) / 257) }
+	return color.RGBA{mix(r1, r2), mix(g1, g2), mix(b1, b2), 255}
 }
 
 // WidthMethod must match how the Bubble Tea renderer measures cells: wcwidth

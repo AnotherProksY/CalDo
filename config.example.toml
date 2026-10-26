@@ -9,7 +9,7 @@ mouse = true         # clicks and wheel; hold Shift to select text in the termin
 
 [calendar]
 week_start = "monday"     # or "sunday"
-default_view = "month"    # "month", "week" or "agenda"
+default_view = "month"    # "month", "days" (3 days), "week" or "agenda"
 agenda_days = 14
 default_duration = "1h"   # length of new timed events
 time_format = "15:04"

@@ -44,7 +44,7 @@ type General struct {
 type CalendarConfig struct {
 	// WeekStart is "monday" or "sunday".
 	WeekStart string `toml:"week_start"`
-	// DefaultView is "month", "week" or "agenda".
+	// DefaultView is "month", "days", "week" or "agenda".
 	DefaultView string `toml:"default_view"`
 	AgendaDays  int    `toml:"agenda_days"`
 	// DefaultDuration of new timed events.

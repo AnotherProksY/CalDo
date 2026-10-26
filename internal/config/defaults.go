@@ -54,6 +54,7 @@ const (
 	ActToggleFocus = "toggle_focus"
 	ActToggleSplit = "toggle_split"
 	ActViewMonth   = "view_month"
+	ActViewDays    = "view_days"
 	ActViewWeek    = "view_week"
 	ActViewAgenda  = "view_agenda"
 	ActLeft        = "left"
@@ -89,8 +90,9 @@ func DefaultKeys() map[string][]string {
 		ActToggleFocus: {"space"},
 		ActToggleSplit: {"\\"},
 		ActViewMonth:   {"1"},
-		ActViewWeek:    {"2"},
-		ActViewAgenda:  {"3"},
+		ActViewDays:    {"2"},
+		ActViewWeek:    {"3"},
+		ActViewAgenda:  {"4"},
 		ActLeft:        {"h", "left"},
 		ActDown:        {"j", "down"},
 		ActUp:          {"k", "up"},

@@ -201,7 +201,7 @@ func (m *Model) Init() tea.Cmd {
 	m.dataVersion, _ = m.st.DataVersion()
 	// Re-check the size once the resize listener is up: a tiling WM can
 	// resize the terminal between the initial size read and SIGWINCH setup.
-	cmds := []tea.Cmd{tea.RequestWindowSize, watchTick()}
+	cmds := []tea.Cmd{tea.RequestWindowSize, tea.RequestBackgroundColor, watchTick()}
 	if m.syncer != nil && m.syncer.Enabled() {
 		cmds = append(cmds, m.startSync())
 	}
@@ -244,6 +244,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.w, m.h = msg.Width, msg.Height
+		return m, nil
+
+	case tea.BackgroundColorMsg:
+		// Event blocks in the day view are tinted against the real background.
+		m.th.Background = msg.Color
 		return m, nil
 
 	case tea.ModeReportMsg:
@@ -340,11 +345,13 @@ func (m *Model) action(act string) tea.Cmd {
 	case config.ActToggleSplit:
 		m.split = !m.split
 		return nil
-	case config.ActViewMonth, config.ActViewWeek, config.ActViewAgenda:
-		// 1/2/3 switch the views of the focused pane.
-		i := map[string]int{config.ActViewMonth: 0, config.ActViewWeek: 1, config.ActViewAgenda: 2}[act]
+	case config.ActViewMonth, config.ActViewDays, config.ActViewWeek, config.ActViewAgenda:
+		// 1–4 switch the views of the focused pane; the tasks pane has three.
+		i := map[string]int{config.ActViewMonth: 0, config.ActViewDays: 1, config.ActViewWeek: 2, config.ActViewAgenda: 3}[act]
 		if m.focus == paneTasks {
-			m.tasks.SetView(tasks.View(i))
+			if i < 3 {
+				m.tasks.SetView(tasks.View(i))
+			}
 		} else {
 			m.cal.SetView(calendar.View(i))
 		}

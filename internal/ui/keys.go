@@ -61,8 +61,9 @@ var helpSections = []struct {
 	}},
 	{"Calendar views", [][2]string{
 		{config.ActViewMonth, "calendar: month · tasks: today"},
-		{config.ActViewWeek, "calendar: week · tasks: upcoming"},
-		{config.ActViewAgenda, "calendar: agenda · tasks: all"},
+		{config.ActViewDays, "calendar: 3 days · tasks: upcoming"},
+		{config.ActViewWeek, "calendar: week · tasks: all"},
+		{config.ActViewAgenda, "calendar: agenda"},
 	}},
 	{"Items", [][2]string{
 		{config.ActAdd, "quick add"},

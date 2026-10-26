@@ -1,4 +1,4 @@
-// Package calendar is the calendar pane: month grid + day list, week and agenda views,
+// Package calendar is the calendar pane: month grid + day timeline, 3-day, week and agenda views,
 // navigated with a cursor over days and individual events.
 package calendar
 
@@ -16,14 +16,21 @@ import (
 
 type View int
 
+// Views in the order of their keys (1–4).
 const (
 	Month View = iota
+	Days
 	Week
 	Agenda
 )
 
+// daysShown is how many days the Days view shows side by side.
+const daysShown = 3
+
 func ParseView(s string) View {
 	switch s {
+	case "days", "3days":
+		return Days
 	case "week":
 		return Week
 	case "agenda":
@@ -33,7 +40,7 @@ func ParseView(s string) View {
 }
 
 func (v View) String() string {
-	return [...]string{"Month", "Week", "Agenda"}[v]
+	return [...]string{"Month", "3 days", "Week", "Agenda"}[v]
 }
 
 // Source provides occurrences and calendar colors.
@@ -50,6 +57,8 @@ type Model struct {
 	listFocus  bool      // month view: true when the day list has focus
 	sel        int       // selected occurrence index within the current list
 	scroll     int
+	dayScroll  int       // month and days views: first visible timeline row
+	daysStart  time.Time // days view: first day shown
 	weekStart  time.Weekday
 	agendaDays int
 	timeFmt    string
@@ -103,7 +112,7 @@ func (m *Model) clock() time.Time {
 // SelectNow puts the list cursor on the item that is on now or comes next,
 // skipping today's all-day items; if everything today is over, on the last.
 func (m *Model) SelectNow() {
-	m.sel, m.scroll = 0, 0
+	m.sel, m.scroll, m.dayScroll = 0, 0, 0
 	if !m.cursor.Equal(today()) {
 		return
 	}
@@ -124,7 +133,7 @@ func (m *Model) SelectNow() {
 	}
 }
 func (m *Model) Invalidate()        { m.cacheValid = false }
-func (m *Model) SetView(v View)     { m.view = v; m.SelectNow() }
+func (m *Model) SetView(v View)     { m.view = v; m.daysStart = m.cursor; m.SelectNow() }
 func (m Model) CurrentView() View   { return m.view }
 func (m Model) Cursor() time.Time   { return m.cursor }
 func (m *Model) SetFilter(f string) { m.filter = strings.ToLower(f); m.Invalidate(); m.clampSel() }
@@ -134,6 +143,9 @@ func (m Model) ListFocused() bool   { return m.view != Month || m.listFocus }
 
 func (m *Model) visibleRange() (time.Time, time.Time) {
 	switch m.view {
+	case Days:
+		s := m.daysWindow()
+		return s, s.AddDate(0, 0, daysShown)
 	case Week:
 		s := m.weekOf(m.cursor)
 		return s, s.AddDate(0, 0, 7)
@@ -223,6 +235,18 @@ func (m *Model) clampSel() {
 	}
 }
 
+// daysWindow is the first day of the Days view, shifted just enough to keep
+// the cursor in view.
+func (m *Model) daysWindow() time.Time {
+	switch {
+	case m.daysStart.IsZero() || m.cursor.Before(m.daysStart):
+		m.daysStart = m.cursor
+	case !m.cursor.Before(m.daysStart.AddDate(0, 0, daysShown)):
+		m.daysStart = m.cursor.AddDate(0, 0, 1-daysShown)
+	}
+	return m.daysStart
+}
+
 func (m *Model) weekOf(t time.Time) time.Time {
 	off := (int(t.Weekday()) - int(m.weekStart) + 7) % 7
 	return time.Date(t.Year(), t.Month(), t.Day()-off, 0, 0, 0, 0, time.Local)
@@ -268,11 +292,15 @@ func (m *Model) Bottom() { m.sel = max(0, len(m.currentList())-1) }
 
 func (m *Model) Today() {
 	m.cursor = today()
+	m.daysStart = m.cursor
 	m.SelectNow()
 }
 
 func (m *Model) Period(dir int) {
 	switch m.view {
+	case Days:
+		m.daysStart = m.daysWindow().AddDate(0, 0, daysShown*dir)
+		m.moveDays(daysShown * dir)
 	case Week:
 		m.moveDays(7 * dir)
 	case Agenda:
@@ -317,6 +345,10 @@ func (m *Model) SelectEvent(id string, day time.Time) {
 
 func (m *Model) Title() string {
 	switch m.view {
+	case Days:
+		s := m.daysWindow()
+		e := s.AddDate(0, 0, daysShown-1)
+		return fmt.Sprintf("3 days · %s – %s", s.Format("2 Jan"), e.Format("2 Jan 2006"))
 	case Week:
 		s := m.weekOf(m.cursor)
 		e := s.AddDate(0, 0, 6)
@@ -381,6 +413,8 @@ func (m *Model) Render(w, h int, active bool) []string {
 	m.clampSel()
 	m.hits = m.hits[:0]
 	switch m.view {
+	case Days:
+		return m.renderDays(w, h, active)
 	case Week:
 		return m.renderWeek(w, h, active)
 	case Agenda:
@@ -449,15 +483,21 @@ func (m *Model) renderMonth(w, h int, active bool) []string {
 			if day.Equal(td) {
 				st = th.TodayStyle
 			}
-			cell := st.Render(num)
 			if day.Equal(m.cursor) {
+				// A pill around the number and its mark: solid while the grid
+				// has focus, a tint of the accent otherwise, so it never fades out.
+				digits := fmt.Sprint(day.Day())
+				hl := lipgloss.NewStyle().Background(th.TintColor(th.Accent, 0.35)).Bold(true)
 				if active && !m.listFocus {
-					cell = th.Selected.Foreground(th.Accent).Render(num)
-				} else {
-					cell = th.SelectedDim.Inherit(st).Render(num)
+					hl = th.Selected.Foreground(th.Accent)
 				}
+				if day.Equal(td) {
+					hl = hl.Foreground(th.Today)
+				}
+				row += strings.Repeat(" ", max(0, cw-2-len(digits))) + hl.Render(" "+digits+mark)
+				continue
 			}
-			row += cell + th.Fg("").Render(mark)
+			row += st.Render(num) + th.Fg("").Render(mark)
 		}
 		lines = append(lines, pad+row)
 		if spacious && wk < 5 {
@@ -472,7 +512,7 @@ func (m *Model) renderMonth(w, h int, active bool) []string {
 	}
 	lines = append(lines, th.Rule(label, w, active && m.listFocus))
 	listH := h - len(lines)
-	lines = append(lines, m.renderEventList(m.dayOccurrences(m.cursor), w, listH, active && m.listFocus, len(lines))...)
+	lines = append(lines, m.renderDay(m.dayOccurrences(m.cursor), w, listH, active && m.listFocus, len(lines))...)
 	return lines
 }
 

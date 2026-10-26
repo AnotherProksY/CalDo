@@ -1,0 +1,44 @@
+# Release builds: `git tag vX.Y.Z && git push --tags` runs .github/workflows/release.yml.
+# Local dry run: goreleaser release --snapshot --clean
+version: 2
+project_name: caldo
+
+builds:
+  - main: ./cmd/caldo
+    binary: caldo
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, darwin]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+      - -X caldo/internal/auth.googleClientID={{ envOrDefault "GOOGLE_CLIENT_ID" "" }}
+      - -X caldo/internal/auth.googleClientSecret={{ envOrDefault "GOOGLE_CLIENT_SECRET" "" }}
+
+archives:
+  - formats: [tar.gz]
+    name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - README.md
+      - config.example.toml
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  sort: asc
+
+brews:
+  - repository:
+      owner: AnotherProksY
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    directory: Formula
+    homepage: https://github.com/AnotherProksY/CalDo
+    description: Terminal calendar and task manager with Google Calendar and Todoist sync
+    install: |
+      bin.install "caldo"
+    caveats: |
+      Run `caldo` to connect Todoist and Google Calendar.
+    test: |
+      assert_match version.to_s, shell_output("#{bin}/caldo version")

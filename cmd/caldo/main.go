@@ -14,6 +14,9 @@ import (
 	"caldo/internal/ui"
 )
 
+// version is set at release time with -ldflags "-X main.version=...".
+var version = "dev"
+
 const usage = `Usage: caldo [flags] [command]
 
 Commands:
@@ -26,6 +29,7 @@ Commands:
                   run notify every minute and sync every 15 minutes in the
                   background (systemd user timers / launchd agents)
   demo            fill the database with sample data (use with --db)
+  version         print the version and exit
 
 Flags:
 `
@@ -42,6 +46,10 @@ func main() {
 		flag.PrintDefaults()
 	}
 	flag.Parse()
+	if flag.Arg(0) == "version" {
+		fmt.Println("caldo", version)
+		return
+	}
 	paths.ConfigFile, paths.DBFile = *cfgPath, *dbPath
 
 	cfg, err := config.Load(paths.ConfigFile)

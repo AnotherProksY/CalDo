@@ -15,12 +15,31 @@ A terminal calendar and task manager with two-way sync to **Google Calendar** an
 - Mouse support: click to focus a pane and select days, events or tasks; double-click opens details; right-click opens a context menu; middle-click completes a task, edits an event or adds an event on a day; the wheel scrolls lists or flips months over the grid.
 - Local-first: everything works offline. Changes are queued and pushed when you're back online. If an item changes in both places, the server version wins, and your version is kept under `C` (conflicts) so you can restore it.
 
+## Install
+
+Linux and macOS (amd64, arm64):
+
+```sh
+brew install anotherproksy/tap/caldo
+# or, without Homebrew, into ~/.local/bin:
+curl -fsSL https://raw.githubusercontent.com/AnotherProksY/CalDo/main/install.sh | sh
+```
+
+Then run `caldo`: the first start walks you through connecting Todoist and Google Calendar.
+
 ## Build
 
 ```sh
 make build        # → bin/caldo
 make demo         # try it with sample data in a throwaway database
 ```
+
+## Release
+
+Push a `v*` tag (`git tag v0.1.0 && git push --tags`). The `release` workflow runs GoReleaser (`.goreleaser.yaml`), which publishes the archives to GitHub Releases and updates the formula in `AnotherProksY/homebrew-tap`. It needs these repository secrets:
+
+- `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`: the Desktop OAuth client built into release binaries.
+- `HOMEBREW_TAP_TOKEN`: a fine-grained token with *Contents: write* on the tap repository.
 
 ## Connect services
 

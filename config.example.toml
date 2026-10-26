@@ -16,7 +16,12 @@ time_format = "15:04"
 show_tasks = true         # list tasks with a due date in the calendar
 
 [tasks]
-group_by = "project"      # "project", "date" or "label"
+default_view = "today"    # "today", "upcoming" or "all" (keys 1/2/3 in the tasks pane)
+# Grouping per view: "project", "date" (overdue/today/tomorrow/…), "day" or "label".
+# `s` changes it while the app runs; these are the startup defaults.
+group_today = "date"
+group_upcoming = "day"
+group_all = "project"
 show_completed = false
 
 [sync]

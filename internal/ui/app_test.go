@@ -13,6 +13,7 @@ import (
 	"caldo/internal/config"
 	"caldo/internal/model"
 	"caldo/internal/store"
+	"caldo/internal/ui/calendar"
 	"caldo/internal/ui/theme"
 )
 
@@ -32,7 +33,9 @@ func newTestModel(t *testing.T) *Model {
 		Start: day.Add(13 * time.Hour), End: day.Add(14 * time.Hour)}))
 	must(t, st.SaveTask(&model.Task{ProjectID: store.LocalInboxID, Content: "Buy milk", Priority: 4}))
 	must(t, st.SaveTask(&model.Task{ProjectID: store.LocalInboxID, Content: "Read", Checked: true}))
-	m := New(config.Default(), st, nil)
+	cfg := config.Default()
+	cfg.Tasks.DefaultView = "all" // the sample tasks have no due dates
+	m := New(cfg, st, nil)
 	m.Update(tea.WindowSizeMsg{Width: 120, Height: 34})
 	return m
 }
@@ -315,4 +318,65 @@ func TestMouse(t *testing.T) {
 	if _, ok := m.dlg.(*inputDialog); !ok {
 		t.Fatalf("middle click on a day should open quick add, got %T", m.dlg)
 	}
+}
+
+func TestTaskViews(t *testing.T) {
+	m := newTestModel(t)
+	day := func(n int) string { return time.Now().AddDate(0, 0, n).Format("2006-01-02") }
+	for _, tk := range []*model.Task{
+		{Content: "Late", Due: &model.Due{Date: day(-2)}},
+		{Content: "Now", Due: &model.Due{Date: day(0)}},
+		{Content: "Soon", Due: &model.Due{Date: day(1)}},
+		{Content: "Later on", Due: &model.Due{Date: day(5)}},
+	} {
+		tk.ProjectID = store.LocalInboxID
+		must(t, m.st.SaveTask(tk))
+	}
+	m.Update(changed())
+	press(m, "space") // focus tasks
+
+	press(m, "1")
+	s := screen(m)
+	if !strings.Contains(s, "Tasks · Today · by date") || !strings.Contains(s, "Late") || !strings.Contains(s, "Now") ||
+		strings.Contains(s, "Soon") || strings.Contains(s, "Buy milk") {
+		t.Fatalf("Today should list overdue and today only:\n%s", s)
+	}
+	if m.cal.CurrentView() != calendar.Month {
+		t.Fatal("1 in the tasks pane must not change the calendar view")
+	}
+
+	press(m, "2")
+	s = screen(m)
+	if !strings.Contains(s, "Tasks · Upcoming · by day") || !strings.Contains(s, "Tomorrow · ") ||
+		!strings.Contains(s, "Later on") || strings.Contains(s, "Buy milk") {
+		t.Fatalf("Upcoming should group dated tasks by day:\n%s", s)
+	}
+
+	// Grouping is remembered per view.
+	press(m, "s") // upcoming: day -> label
+	press(m, "3")
+	if s := screen(m); !strings.Contains(s, "Tasks · All · by project") || !strings.Contains(s, "Buy milk") {
+		t.Fatalf("All keeps its own grouping:\n%s", s)
+	}
+	press(m, "2")
+	if !strings.Contains(screen(m), "Upcoming · by label") {
+		t.Fatal("Upcoming should keep the grouping chosen for it")
+	}
+
+	// Quick add in Today gives the task a due date of today.
+	press(m, "1", "a")
+	for _, r := range "Fresh" {
+		m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
+	}
+	press(m, "enter")
+	ts, _ := m.st.Tasks(false)
+	for _, tk := range ts {
+		if tk.Content == "Fresh" {
+			if tk.Due == nil || tk.Due.Date != day(0) {
+				t.Fatalf("task added in Today should be due today: %+v", tk.Due)
+			}
+			return
+		}
+	}
+	t.Fatal("quick-added task not found")
 }

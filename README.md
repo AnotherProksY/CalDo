@@ -6,6 +6,7 @@ A terminal calendar and task manager with two-way sync to **Google Calendar** an
 - You move a cursor over days and individual events or tasks, as in calcurse.
 - Tasks with a due date also show up in the calendar, colored by project. `e`, `x`, `d`, `m` and `p` act on the task when one is selected there.
 - Month grid with a day list, plus week and agenda views. Recurring events are supported, with "only this / this and following / all" edits.
+- Three task views: **Today** (overdue and due today), **Upcoming** (dated tasks, one group per day) and **All**. Each view remembers its own grouping.
 - The task list looks like taskbook: groups with `[done/total]`, `✔ ☐` icons, priorities and a completion summary.
 - Press `e` to edit any event or task in `$EDITOR` (vim/nvim) as a YAML frontmatter + Markdown document.
 - Desktop notifications via `notify-send`. Event reminders have separate defaults for timed and all-day events and can be overridden per event. Tasks notify at their due time.
@@ -63,13 +64,13 @@ Press `?` in the app for the full list. The basics:
 | `\` | split / full screen |
 | `h j k l` / arrows | move |
 | `tab` | month grid ⇄ day events |
-| `1` `2` `3` | month / week / agenda |
+| `1` `2` `3` | calendar: month / week / agenda · tasks: today / upcoming / all |
 | `[` `]`, `t` | previous / next period, today |
 | `a` / `A` | quick add / add in `$EDITOR` |
 | `e`, `enter`, `d` | edit, details, delete |
 | `x` | complete task |
 | `p`, `m` | cycle priority, reschedule / move |
-| `s`, `v` | group tasks by project/date/label, show completed |
+| `s`, `v` | change the task view's grouping (project/date/day/label), show completed |
 | `/`, `f` | text filter, choose calendars & projects |
 | `r`, `C` | sync now, conflicts |
 

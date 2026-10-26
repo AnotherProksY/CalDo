@@ -20,21 +20,47 @@ type GroupBy int
 
 const (
 	ByProject GroupBy = iota
-	ByDate
+	ByDate            // Overdue / Today / Tomorrow / Next 7 days / Later / No date
+	ByDay             // one group per due date
 	ByLabel
+	numGroupBy
 )
 
 func ParseGroupBy(s string) GroupBy {
 	switch s {
 	case "date":
 		return ByDate
+	case "day":
+		return ByDay
 	case "label":
 		return ByLabel
 	}
 	return ByProject
 }
 
-func (g GroupBy) String() string { return [...]string{"project", "date", "label"}[g] }
+func (g GroupBy) String() string { return [...]string{"project", "date", "day", "label"}[g] }
+
+// View picks which tasks the pane lists.
+type View int
+
+const (
+	Today    View = iota // overdue and due today
+	Upcoming             // everything with a due date
+	All
+	numViews
+)
+
+func ParseView(s string) View {
+	switch s {
+	case "upcoming":
+		return Upcoming
+	case "all":
+		return All
+	}
+	return Today
+}
+
+func (v View) String() string { return [...]string{"Today", "Upcoming", "All"}[v] }
 
 // Data is everything the pane renders.
 type Data struct {
@@ -53,7 +79,8 @@ type row struct {
 type Model struct {
 	th            *theme.Theme
 	data          Data
-	groupBy       GroupBy
+	view          View
+	groupBy       [numViews]GroupBy // remembered per view
 	showCompleted bool
 	filter        string
 
@@ -64,8 +91,9 @@ type Model struct {
 	lineRows []int
 }
 
-func New(th *theme.Theme, groupBy GroupBy, showCompleted bool) Model {
-	return Model{th: th, groupBy: groupBy, showCompleted: showCompleted}
+// New creates the pane; groups holds the grouping for Today, Upcoming and All.
+func New(th *theme.Theme, view View, groups [3]GroupBy, showCompleted bool) Model {
+	return Model{th: th, view: view, groupBy: groups, showCompleted: showCompleted}
 }
 
 func (m *Model) SetData(d Data) {
@@ -82,11 +110,20 @@ func (m *Model) SetFilter(f string) {
 	m.rebuild(m.selectedID())
 }
 
+// CycleGroupBy changes the current view's grouping.
 func (m *Model) CycleGroupBy() GroupBy {
-	m.groupBy = (m.groupBy + 1) % 3
+	m.groupBy[m.view] = (m.groupBy[m.view] + 1) % numGroupBy
 	m.rebuild(m.selectedID())
-	return m.groupBy
+	return m.groupBy[m.view]
 }
+
+func (m *Model) SetView(v View) {
+	m.view = v
+	m.scroll = 0
+	m.rebuild(m.selectedID())
+}
+
+func (m Model) CurrentView() View { return m.view }
 
 func (m *Model) ToggleCompleted() bool {
 	m.showCompleted = !m.showCompleted
@@ -94,7 +131,7 @@ func (m *Model) ToggleCompleted() bool {
 	return m.showCompleted
 }
 
-func (m Model) GroupByMode() GroupBy { return m.groupBy }
+func (m Model) GroupByMode() GroupBy { return m.groupBy[m.view] }
 
 func (m *Model) selectedID() string {
 	if t := m.Selected(); t != nil {
@@ -197,15 +234,42 @@ func (m *Model) visible(t *model.Task) bool {
 	return true
 }
 
+// viewTasks is the subset of tasks the current view lists.
+func (m *Model) viewTasks() []*model.Task {
+	if m.view == All {
+		return m.data.Tasks
+	}
+	td := today()
+	var out []*model.Task
+	for _, t := range m.data.Tasks {
+		d, _, ok := t.Due.Time()
+		if !ok {
+			continue
+		}
+		if m.view == Today && !dayOf(d).Before(td.AddDate(0, 0, 1)) {
+			continue
+		}
+		out = append(out, t)
+	}
+	return out
+}
+
+func dayOf(t time.Time) time.Time {
+	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.Local)
+}
+
 func (m *Model) rebuild(keepID string) {
 	m.rows = m.rows[:0]
-	switch m.groupBy {
+	ts := m.viewTasks()
+	switch m.groupBy[m.view] {
 	case ByDate:
-		m.buildByDate()
+		m.buildByDate(ts)
+	case ByDay:
+		m.buildByDay(ts)
 	case ByLabel:
-		m.buildByLabel()
+		m.buildByLabel(ts)
 	default:
-		m.buildByProject()
+		m.buildByProject(ts)
 	}
 	m.cursor = -1
 	if keepID != "" {
@@ -235,9 +299,9 @@ func sortTasks(ts []*model.Task) {
 	})
 }
 
-func (m *Model) buildByProject() {
+func (m *Model) buildByProject(tasks []*model.Task) {
 	byProject := map[string][]*model.Task{}
-	for _, t := range m.data.Tasks {
+	for _, t := range tasks {
 		byProject[t.ProjectID] = append(byProject[t.ProjectID], t)
 	}
 	for _, p := range m.data.Projects {
@@ -313,11 +377,11 @@ func (m *Model) sectionKnown(id string) bool {
 	return false
 }
 
-func (m *Model) buildByDate() {
+func (m *Model) buildByDate(tasks []*model.Task) {
 	td := today()
 	names := []string{"Overdue", "Today", "Tomorrow", "Next 7 days", "Later", "No date"}
 	groups := make([][]*model.Task, len(names))
-	for _, t := range m.data.Tasks {
+	for _, t := range tasks {
 		d, _, ok := t.Due.Time()
 		g := 5
 		if ok {
@@ -338,26 +402,73 @@ func (m *Model) buildByDate() {
 		groups[g] = append(groups[g], t)
 	}
 	for i, ts := range groups {
-		sort.SliceStable(ts, func(a, b int) bool {
-			if ts[a].Checked != ts[b].Checked {
-				return !ts[a].Checked
-			}
-			da, _, _ := ts[a].Due.Time()
-			db, _, _ := ts[b].Due.Time()
-			if !da.Equal(db) {
-				return da.Before(db)
-			}
-			return ts[a].Priority > ts[b].Priority
-		})
+		sortByDue(ts)
 		m.addFlatGroup(names[i], ts)
 	}
 }
 
-func (m *Model) buildByLabel() {
+func sortByDue(ts []*model.Task) {
+	sort.SliceStable(ts, func(a, b int) bool {
+		if ts[a].Checked != ts[b].Checked {
+			return !ts[a].Checked
+		}
+		da, _, _ := ts[a].Due.Time()
+		db, _, _ := ts[b].Due.Time()
+		if !da.Equal(db) {
+			return da.Before(db)
+		}
+		return ts[a].Priority > ts[b].Priority
+	})
+}
+
+// buildByDay makes one group per due date, like Todoist's Upcoming; overdue
+// tasks share one group at the top and undated ones go last.
+func (m *Model) buildByDay(tasks []*model.Task) {
+	td := today()
+	var overdue, undated []*model.Task
+	byDay := map[time.Time][]*model.Task{}
+	var days []time.Time
+	for _, t := range tasks {
+		d, _, ok := t.Due.Time()
+		switch {
+		case !ok:
+			undated = append(undated, t)
+		case dayOf(d).Before(td):
+			overdue = append(overdue, t)
+		default:
+			day := dayOf(d)
+			if _, seen := byDay[day]; !seen {
+				days = append(days, day)
+			}
+			byDay[day] = append(byDay[day], t)
+		}
+	}
+	sort.Slice(days, func(i, j int) bool { return days[i].Before(days[j]) })
+	sortByDue(overdue)
+	m.addFlatGroup("Overdue", overdue)
+	for _, day := range days {
+		name := day.Format("Mon 2 Jan")
+		if day.Year() != td.Year() {
+			name = day.Format("Mon 2 Jan 2006")
+		}
+		switch {
+		case day.Equal(td):
+			name = "Today · " + name
+		case day.Equal(td.AddDate(0, 0, 1)):
+			name = "Tomorrow · " + name
+		}
+		sortByDue(byDay[day])
+		m.addFlatGroup(name, byDay[day])
+	}
+	sortByDue(undated)
+	m.addFlatGroup("No date", undated)
+}
+
+func (m *Model) buildByLabel(tasks []*model.Task) {
 	byLabel := map[string][]*model.Task{}
 	var names []string
 	var none []*model.Task
-	for _, t := range m.data.Tasks {
+	for _, t := range tasks {
 		if len(t.Labels) == 0 {
 			none = append(none, t)
 		}
@@ -394,7 +505,7 @@ func (m *Model) addFlatGroup(name string, ts []*model.Task) {
 // --- rendering -----------------------------------------------------------
 
 func (m *Model) Title() string {
-	return "Tasks · by " + m.groupBy.String()
+	return "Tasks · " + m.view.String() + " · by " + m.groupBy[m.view].String()
 }
 
 func (m *Model) Render(w, h int, active bool) []string {
@@ -404,7 +515,8 @@ func (m *Model) Render(w, h int, active bool) []string {
 	var lines []string
 	m.lineRows = m.lineRows[:0]
 	if len(m.rows) == 0 {
-		lines = append(lines, th.Faint.Render("  No tasks — press a to add one"))
+		empty := map[View]string{Today: "Nothing due today", Upcoming: "No upcoming tasks", All: "No tasks"}[m.view]
+		lines = append(lines, th.Faint.Render("  "+empty+" — press a to add one"))
 	} else {
 		// Blank line before each top-level group header except the first.
 		type line struct {
@@ -560,7 +672,7 @@ func (m *Model) dueLabel(t *model.Task) string {
 func (m *Model) footer() []string {
 	th := m.th
 	done, pending := 0, 0
-	for _, t := range m.data.Tasks {
+	for _, t := range m.viewTasks() {
 		if t.Checked {
 			done++
 		} else {
@@ -573,7 +685,8 @@ func (m *Model) footer() []string {
 		pct = done * 100 / total
 	}
 	return []string{
-		th.Faint.Render(fmt.Sprintf("  %d%% of all tasks complete.", pct)),
+		th.Faint.Render(fmt.Sprintf("  %d%% of %s complete.", pct,
+			map[View]string{Today: "today's tasks", Upcoming: "upcoming tasks", All: "all tasks"}[m.view])),
 		"  " + th.DoneIcon.Render(fmt.Sprintf("%d", done)) + th.Faint.Render(" done · ") +
 			th.PendingIcon.Render(fmt.Sprintf("%d", pending)) + th.Faint.Render(" pending"),
 	}

@@ -60,9 +60,9 @@ var helpSections = []struct {
 		{config.ActBottom, "last item"},
 	}},
 	{"Calendar views", [][2]string{
-		{config.ActViewMonth, "month + day list"},
-		{config.ActViewWeek, "week"},
-		{config.ActViewAgenda, "agenda"},
+		{config.ActViewMonth, "calendar: month · tasks: today"},
+		{config.ActViewWeek, "calendar: week · tasks: upcoming"},
+		{config.ActViewAgenda, "calendar: agenda · tasks: all"},
 	}},
 	{"Items", [][2]string{
 		{config.ActAdd, "quick add"},
@@ -73,7 +73,7 @@ var helpSections = []struct {
 		{config.ActDelete, "delete"},
 		{config.ActPostpone, "move event / reschedule task"},
 		{config.ActPriority, "cycle task priority"},
-		{config.ActGroupBy, "group tasks by project/date/label"},
+		{config.ActGroupBy, "group by project/date/day/label (per view)"},
 		{config.ActShowDone, "show / hide completed tasks"},
 	}},
 }

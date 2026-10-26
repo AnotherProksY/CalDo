@@ -17,6 +17,7 @@ import (
 	"caldo/internal/model"
 	"caldo/internal/recur"
 	"caldo/internal/remind"
+	"caldo/internal/ui/tasks"
 	"caldo/internal/ui/theme"
 )
 
@@ -524,6 +525,10 @@ func (m *Model) quickAddTask() tea.Cmd {
 			return status(err)
 		}
 		t.Sort = int(time.Now().Unix())
+		if t.Due == nil && m.tasks.CurrentView() == tasks.Today {
+			// Like Todoist: tasks added in Today are due today, or they'd vanish.
+			t.Due = editor.ParseDue("today", nil)
+		}
 		if err := m.st.SaveTask(t); err != nil {
 			return status(err)
 		}

@@ -13,7 +13,12 @@ func Default() *Config {
 			TimeFormat:      "15:04",
 			ShowTasks:       true,
 		},
-		Tasks:   TasksConfig{GroupBy: "project"},
+		Tasks: TasksConfig{
+			DefaultView:   "today",
+			GroupToday:    "date",
+			GroupUpcoming: "day",
+			GroupAll:      "project",
+		},
 		Sync:    SyncConfig{Interval: duration{5 * time.Minute}},
 		Google:  GoogleConfig{PastDays: 365},
 		Todoist: TodoistConfig{BaseURL: "https://api.todoist.com/api/v1"},

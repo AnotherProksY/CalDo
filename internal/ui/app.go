@@ -81,7 +81,11 @@ func New(cfg *config.Config, st *store.Store, syncer Syncer) *Model {
 		split:  cfg.General.Layout != "full",
 	}
 	m.cal = calendar.New(m, th, calendar.ParseView(cfg.Calendar.DefaultView), ws, cfg.Calendar.AgendaDays, cfg.Calendar.TimeFormat)
-	m.tasks = tasks.New(th, tasks.ParseGroupBy(cfg.Tasks.GroupBy), cfg.Tasks.ShowCompleted)
+	m.tasks = tasks.New(th, tasks.ParseView(cfg.Tasks.DefaultView), [3]tasks.GroupBy{
+		tasks.ParseGroupBy(cfg.Tasks.GroupToday),
+		tasks.ParseGroupBy(cfg.Tasks.GroupUpcoming),
+		tasks.ParseGroupBy(cfg.Tasks.GroupAll),
+	}, cfg.Tasks.ShowCompleted)
 	m.reload()
 	return m
 }
@@ -333,9 +337,13 @@ func (m *Model) action(act string) tea.Cmd {
 		m.split = !m.split
 		return nil
 	case config.ActViewMonth, config.ActViewWeek, config.ActViewAgenda:
-		v := map[string]calendar.View{config.ActViewMonth: calendar.Month, config.ActViewWeek: calendar.Week, config.ActViewAgenda: calendar.Agenda}[act]
-		m.cal.SetView(v)
-		m.focus = paneCalendar
+		// 1/2/3 switch the views of the focused pane.
+		i := map[string]int{config.ActViewMonth: 0, config.ActViewWeek: 1, config.ActViewAgenda: 2}[act]
+		if m.focus == paneTasks {
+			m.tasks.SetView(tasks.View(i))
+		} else {
+			m.cal.SetView(calendar.View(i))
+		}
 		return nil
 	case config.ActSync:
 		if m.syncing {

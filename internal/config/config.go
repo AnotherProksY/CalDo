@@ -55,7 +55,13 @@ type CalendarConfig struct {
 }
 
 type TasksConfig struct {
-	// GroupBy is "project", "date" or "label".
+	// DefaultView is "today", "upcoming" or "all".
+	DefaultView string `toml:"default_view"`
+	// Group* are each view's grouping: "project", "date", "day" or "label".
+	GroupToday    string `toml:"group_today"`
+	GroupUpcoming string `toml:"group_upcoming"`
+	GroupAll      string `toml:"group_all"`
+	// GroupBy is the pre-views name of group_all, still honoured.
 	GroupBy       string `toml:"group_by"`
 	ShowCompleted bool   `toml:"show_completed"`
 }
@@ -200,6 +206,9 @@ func (c *Config) normalize() {
 	case "low", "normal", "critical":
 	default:
 		c.Reminders.Urgency = d.Reminders.Urgency
+	}
+	if c.Tasks.GroupBy != "" && c.Tasks.GroupAll == d.Tasks.GroupAll {
+		c.Tasks.GroupAll = c.Tasks.GroupBy
 	}
 	if c.Todoist.BaseURL == "" {
 		c.Todoist.BaseURL = d.Todoist.BaseURL

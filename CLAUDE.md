@@ -40,6 +40,8 @@ Commands (inside the box):
 
 **Mouse** (`ui/mouse.go`). `View` records the frame geometry: `m.layout` holds the pane x/width and `m.dlgRect` the dialog box. Panes record hit regions while rendering. `calendar.Model.hits`, rebuilt each `Render`, maps content cells to days or list indexes, and `tasks.Model.lineRows` maps lines to rows. Clicks go through the same `m.action(act)` dispatcher as keys. Context menus are `choiceDialog{menu: true}`, which are anchored (`anchoredDialog`) and clickable (`clickDialog`). New list rendering must register hits, or clicks on it will do nothing.
 
+**Task views.** `tasks.Model` has a `view` (Today, Upcoming, All). `viewTasks()` filters the data, and the `buildBy*` builders group whatever slice they get. `groupBy` is an array indexed by view, so each view keeps its own grouping. The view keys (`1`/`2`/`3`, actions `view_month`/`view_week`/`view_agenda`) act on the focused pane.
+
 **Key bindings** are action names (`config.Act*`) mapped to key strings in `config.DefaultKeys()` and overridable from `[keys]` in config.toml. To add a key, add the action constant and default binding, handle it in `ui/app.go`, and list it in `helpSections` (`ui/keys.go`).
 
 **Tasks in the calendar.** With `calendar.show_tasks` on, `ui.Model.Occurrences` appends open dated tasks as `model.Occurrence{Task: t}`, with a synthetic `Event` (id `task:<id>`, `CalendarID` = project id for the color) and `recur.Sort` merging them in. Any code that acts on a calendar selection must check `o.Task` first. `calendarKey` routes those selections to task actions (`calendarTaskKey`), never to event or store event methods.

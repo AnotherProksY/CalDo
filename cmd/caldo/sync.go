@@ -34,15 +34,13 @@ func buildSyncer(cfg *config.Config, st *store.Store, paths config.Paths) *synce
 	if tok, err := secrets.Get(auth.KeyTodoistToken); err == nil && tok != "" {
 		providers = append(providers, todoist.New(cfg.Todoist.BaseURL, tok, hc, st))
 	}
-	if cfg.Google.ClientSecretFile != "" {
-		if oc, err := auth.GoogleConfig(cfg.Google.ClientSecretFile); err == nil {
-			ctx := context.WithValue(context.Background(), oauth2.HTTPClient, hc)
-			if ts, err := auth.GoogleTokenSource(ctx, oc, secrets); err == nil {
-				client := oauth2.NewClient(ctx, ts)
-				client.Timeout = 60 * time.Second
-				if g, err := google.New(ctx, st, cfg.Google, option.WithHTTPClient(client)); err == nil {
-					providers = append(providers, g)
-				}
+	if oc, err := auth.GoogleConfig(cfg.Google.ClientSecretFile); err == nil {
+		ctx := context.WithValue(context.Background(), oauth2.HTTPClient, hc)
+		if ts, err := auth.GoogleTokenSource(ctx, oc, secrets); err == nil {
+			client := oauth2.NewClient(ctx, ts)
+			client.Timeout = 60 * time.Second
+			if g, err := google.New(ctx, st, cfg.Google, option.WithHTTPClient(client)); err == nil {
+				providers = append(providers, g)
 			}
 		}
 	}

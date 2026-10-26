@@ -1,9 +1,12 @@
 BIN := bin/caldo
+# Optional built-in Google OAuth client, e.g. GOOGLE_CLIENT_ID=... GOOGLE_CLIENT_SECRET=... make build
+LDFLAGS := -X caldo/internal/auth.googleClientID=$(GOOGLE_CLIENT_ID) \
+	-X caldo/internal/auth.googleClientSecret=$(GOOGLE_CLIENT_SECRET)
 
 .PHONY: build run test lint demo
 
 build:
-	go build -o $(BIN) ./cmd/caldo
+	go build -ldflags "$(LDFLAGS)" -o $(BIN) ./cmd/caldo
 
 run: build
 	./$(BIN)

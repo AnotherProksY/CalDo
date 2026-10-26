@@ -29,7 +29,8 @@ show_completed = false
 interval = "5m"
 
 [google]
-# Desktop OAuth client JSON from Google Cloud Console (see README).
+# Your own Desktop OAuth client JSON from Google Cloud Console (see README).
+# Leave empty to use the client built into release binaries.
 client_secret_file = ""
 calendars = []            # names or ids to sync; empty = all
 exclude_calendars = []    # names or ids never synced, e.g. ["Todoist"]

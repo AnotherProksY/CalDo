@@ -109,11 +109,28 @@ func (s *Secrets) writeFile(m map[string]string) error {
 
 // --- Google --------------------------------------------------------------
 
-// GoogleConfig loads the user's Desktop OAuth client.
+// Built-in Desktop OAuth client, set at release time with
+// -ldflags "-X caldo/internal/auth.googleClientID=... -X caldo/internal/auth.googleClientSecret=...".
+// Google treats installed-app client secrets as public; PKCE protects the flow.
+var (
+	googleClientID     string
+	googleClientSecret string
+)
+
+// GoogleConfig returns the OAuth client: the user's own client JSON when
+// clientSecretFile is set, otherwise the one built into the binary.
 func GoogleConfig(clientSecretFile string) (*oauth2.Config, error) {
 	if clientSecretFile == "" {
-		return nil, errors.New("set [google] client_secret_file in config.toml to your Desktop OAuth client JSON " +
-			"(Google Cloud Console → APIs & Services → Credentials)")
+		if googleClientID == "" {
+			return nil, errors.New("this build has no Google OAuth client; set [google] client_secret_file in config.toml " +
+				"to your Desktop OAuth client JSON (Google Cloud Console → APIs & Services → Credentials)")
+		}
+		return &oauth2.Config{
+			ClientID:     googleClientID,
+			ClientSecret: googleClientSecret,
+			Endpoint:     google.Endpoint,
+			Scopes:       []string{calendar.CalendarScope},
+		}, nil
 	}
 	b, err := os.ReadFile(clientSecretFile)
 	if err != nil {

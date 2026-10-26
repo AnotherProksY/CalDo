@@ -73,7 +73,8 @@ type SyncConfig struct {
 }
 
 type GoogleConfig struct {
-	// ClientSecretFile is the path to the Desktop OAuth client JSON from Google Cloud Console.
+	// ClientSecretFile is the path to a Desktop OAuth client JSON from Google
+	// Cloud Console. Empty means the client built into the release binary.
 	ClientSecretFile string `toml:"client_secret_file"`
 	// Calendars restricts sync to these calendar names/ids; empty means all.
 	Calendars []string `toml:"calendars"`

@@ -26,12 +26,13 @@ make demo         # try it with sample data in a throwaway database
 
 **Todoist:** run `caldo auth todoist` and paste your API token from *Settings → Integrations → Developer*.
 
-**Google Calendar:**
+**Google Calendar:** run `caldo auth google`. A browser window opens for consent. Release binaries include CalDo's OAuth client, so nothing else is needed.
+
+To use your own OAuth client instead (or with a source build that has none):
 1. In [Google Cloud Console](https://console.cloud.google.com/), create a project and enable the **Google Calendar API**.
-2. Configure the OAuth consent screen (External, add yourself as a test user).
+2. Configure the OAuth consent screen (External) and set its publishing status to **In production**. In *Testing*, refresh tokens expire after 7 days.
 3. Create credentials: **OAuth client ID → Desktop app**, then download the JSON.
-4. Set `client_secret_file` under `[google]` in `~/.config/caldo/config.toml`. See `config.example.toml`.
-5. Run `caldo auth google`. A browser window opens for consent.
+4. Either set `client_secret_file` under `[google]` in `~/.config/caldo/config.toml` (see `config.example.toml`), or build the client in: `GOOGLE_CLIENT_ID=... GOOGLE_CLIENT_SECRET=... make build`.
 
 By default every calendar in your Google account is synced. Use `calendars = [...]` to sync only the listed ones, or `exclude_calendars = [...]` to skip a few, for example the "Todoist" calendar created by Todoist's own Google integration, since CalDo already shows those tasks.
 

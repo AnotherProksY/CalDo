@@ -1,0 +1,172 @@
+// Package theme holds lipgloss styles and the panel drawing helpers.
+package theme
+
+import (
+	"image/color"
+	"strings"
+
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
+
+	"caldo/internal/config"
+)
+
+type Theme struct {
+	Accent, Muted, Border, Today, Success, Pending, Warning, Danger, Selection color.Color
+
+	Title       lipgloss.Style
+	TitleActive lipgloss.Style
+	BorderStyle lipgloss.Style
+	BorderOn    lipgloss.Style
+	Faint       lipgloss.Style
+	Bold        lipgloss.Style
+	Header      lipgloss.Style
+	Selected    lipgloss.Style
+	SelectedDim lipgloss.Style
+	TodayStyle  lipgloss.Style
+	Done        lipgloss.Style
+	DoneIcon    lipgloss.Style
+	PendingIcon lipgloss.Style
+	Overdue     lipgloss.Style
+	DueToday    lipgloss.Style
+	StatusBar   lipgloss.Style
+	StatusKey   lipgloss.Style
+	ErrorText   lipgloss.Style
+	P1, P2, P3  lipgloss.Style
+}
+
+func New(c config.Theme) *Theme {
+	t := &Theme{
+		Accent:    lipgloss.Color(c.Accent),
+		Muted:     lipgloss.Color(c.Muted),
+		Border:    lipgloss.Color(c.Border),
+		Today:     lipgloss.Color(c.Today),
+		Success:   lipgloss.Color(c.Success),
+		Pending:   lipgloss.Color(c.Pending),
+		Warning:   lipgloss.Color(c.Warning),
+		Danger:    lipgloss.Color(c.Danger),
+		Selection: lipgloss.Color(c.Selection),
+	}
+	s := lipgloss.NewStyle
+	t.Title = s().Foreground(t.Muted).Bold(true)
+	t.TitleActive = s().Foreground(t.Accent).Bold(true)
+	t.BorderStyle = s().Foreground(t.Border)
+	t.BorderOn = s().Foreground(t.Accent)
+	t.Faint = s().Foreground(t.Muted)
+	t.Bold = s().Bold(true)
+	t.Header = s().Foreground(t.Accent).Bold(true).Underline(true)
+	t.Selected = s().Background(t.Selection).Bold(true)
+	t.SelectedDim = s().Underline(true)
+	t.TodayStyle = s().Foreground(t.Today).Bold(true)
+	t.Done = s().Foreground(t.Muted).Strikethrough(true)
+	t.DoneIcon = s().Foreground(t.Success)
+	t.PendingIcon = s().Foreground(t.Pending)
+	t.Overdue = s().Foreground(t.Danger)
+	t.DueToday = s().Foreground(t.Warning)
+	t.StatusBar = s().Foreground(t.Muted)
+	t.StatusKey = s().Foreground(t.Accent).Bold(true)
+	t.ErrorText = s().Foreground(t.Danger).Bold(true)
+	t.P1 = s().Foreground(t.Danger).Bold(true)
+	t.P2 = s().Foreground(t.Warning)
+	t.P3 = s().Foreground(t.Accent)
+	return t
+}
+
+// Fg returns a foreground style for a hex color, falling back to accent.
+func (t *Theme) Fg(hex string) lipgloss.Style {
+	if hex == "" {
+		return lipgloss.NewStyle().Foreground(t.Accent)
+	}
+	return lipgloss.NewStyle().Foreground(lipgloss.Color(hex))
+}
+
+// Fit pads or truncates s to exactly w cells.
+func Fit(s string, w int) string {
+	if w <= 0 {
+		return ""
+	}
+	sw := ansi.StringWidth(s)
+	if sw > w {
+		return ansi.Truncate(s, w, "…")
+	}
+	return s + strings.Repeat(" ", w-sw)
+}
+
+// Box draws a rounded panel with a title in the top border, calcurse-style.
+// Content lines are fitted to the inner width; missing lines are blank.
+func (t *Theme) Box(title string, lines []string, w, h int, active bool) string {
+	if w < 4 || h < 2 {
+		return ""
+	}
+	bs, ts := t.BorderStyle, t.Title
+	if active {
+		bs, ts = t.BorderOn, t.TitleActive
+	}
+	inner := w - 4
+	var b strings.Builder
+
+	if title != "" {
+		tt := ansi.Truncate(" "+title+" ", w-4, "…")
+		b.WriteString(bs.Render("╭─") + ts.Render(tt) +
+			bs.Render(strings.Repeat("─", max(0, w-3-ansi.StringWidth(tt)))+"╮"))
+	} else {
+		b.WriteString(bs.Render("╭" + strings.Repeat("─", w-2) + "╮"))
+	}
+	b.WriteByte('\n')
+
+	side := bs.Render("│")
+	for i := 0; i < h-2; i++ {
+		var l string
+		if i < len(lines) {
+			l = lines[i]
+		}
+		b.WriteString(side + " " + Fit(l, inner) + " " + side + "\n")
+	}
+	b.WriteString(bs.Render("╰" + strings.Repeat("─", w-2) + "╯"))
+	return b.String()
+}
+
+// Rule draws a horizontal separator with an optional centered label.
+func (t *Theme) Rule(label string, w int, active bool) string {
+	ls := t.Title
+	if active {
+		ls = t.TitleActive
+	}
+	if label == "" {
+		return t.BorderStyle.Render(strings.Repeat("─", w))
+	}
+	lbl := " " + label + " "
+	lw := ansi.StringWidth(lbl)
+	if lw >= w {
+		return ls.Render(ansi.Truncate(lbl, w, "…"))
+	}
+	left := (w - lw) / 2
+	return t.BorderStyle.Render(strings.Repeat("─", left)) + ls.Render(lbl) +
+		t.BorderStyle.Render(strings.Repeat("─", w-lw-left))
+}
+
+// Overlay draws fg centered over bg, cell-accurately.
+func Overlay(bg, fg string, width, height int) string {
+	bgLines := strings.Split(bg, "\n")
+	for len(bgLines) < height {
+		bgLines = append(bgLines, "")
+	}
+	fgLines := strings.Split(fg, "\n")
+	fw := 0
+	for _, l := range fgLines {
+		fw = max(fw, ansi.StringWidth(l))
+	}
+	x := max(0, (width-fw)/2)
+	y := max(0, (height-len(fgLines))/2)
+	for i, l := range fgLines {
+		row := y + i
+		if row >= len(bgLines) {
+			break
+		}
+		base := Fit(bgLines[row], width)
+		left := ansi.Truncate(base, x, "")
+		right := ansi.TruncateLeft(base, x+ansi.StringWidth(l), "")
+		bgLines[row] = left + "\x1b[0m" + l + "\x1b[0m" + right
+	}
+	return strings.Join(bgLines, "\n")
+}

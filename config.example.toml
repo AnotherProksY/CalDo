@@ -1,0 +1,45 @@
+# CalDo configuration — copy to ~/.config/caldo/config.toml.
+# Every key is optional; the values shown are the defaults.
+
+[general]
+editor = ""          # overrides $VISUAL / $EDITOR, e.g. "nvim"
+layout = "split"     # "split" or "full"
+split_ratio = 0.55   # calendar share of the width in split mode
+
+[calendar]
+week_start = "monday"     # or "sunday"
+default_view = "month"    # "month", "week" or "agenda"
+agenda_days = 14
+default_duration = "1h"   # length of new timed events
+time_format = "15:04"
+
+[tasks]
+group_by = "project"      # "project", "date" or "label"
+show_completed = false
+
+[sync]
+interval = "5m"
+
+[google]
+# Desktop OAuth client JSON from Google Cloud Console (see README).
+client_secret_file = ""
+calendars = []            # names or ids to sync; empty = all
+past_days = 365           # how far back the first full sync reaches
+
+[theme]
+accent = "#7aa2f7"
+muted = "#565f89"
+border = "#3b4261"
+today = "#e0af68"
+success = "#9ece6a"
+pending = "#bb9af7"
+warning = "#e0af68"
+danger = "#f7768e"
+selection = "#283457"
+
+# Rebind any action; listed actions replace their defaults.
+# Key names follow Bubble Tea: "space", "enter", "tab", "ctrl+n", "left", "pgdown"…
+[keys]
+# toggle_focus = ["space"]
+# toggle_split = ["\\"]
+# complete = ["x", "c"]

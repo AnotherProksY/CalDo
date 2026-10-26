@@ -44,7 +44,7 @@ func (g GroupBy) String() string { return [...]string{"project", "date", "day", 
 type View int
 
 const (
-	Today    View = iota // overdue and due today
+	Today    View = iota // the calendar's selected day (today: also overdue)
 	Upcoming             // everything with a due date
 	All
 	numViews
@@ -83,6 +83,9 @@ type Model struct {
 	groupBy       [numViews]GroupBy // remembered per view
 	showCompleted bool
 	filter        string
+	// day is the calendar's selected day, which the Today view lists; zero
+	// means today.
+	day time.Time
 
 	rows   []row
 	cursor int // index into rows; always a task row when any exist
@@ -124,6 +127,37 @@ func (m *Model) SetView(v View) {
 }
 
 func (m Model) CurrentView() View { return m.view }
+
+// SetDay makes the Today view list the tasks due on day.
+func (m *Model) SetDay(day time.Time) {
+	day = dayOf(day)
+	if day.Equal(m.Day()) {
+		return
+	}
+	m.day = day
+	m.scroll = 0
+	m.rebuild(m.selectedID())
+}
+
+// Day is the day the Today view lists.
+func (m *Model) Day() time.Time {
+	if m.day.IsZero() {
+		return today()
+	}
+	return m.day
+}
+
+// onToday reports whether the Today view shows the actual today, which also
+// lists overdue tasks.
+func (m *Model) onToday() bool { return m.Day().Equal(today()) }
+
+// dayLabel names the Today view's day: "today" or like "Tue 27 Oct".
+func (m *Model) dayLabel() string {
+	if m.onToday() {
+		return "today"
+	}
+	return m.Day().Format("Mon 2 Jan")
+}
 
 func (m *Model) ToggleCompleted() bool {
 	m.showCompleted = !m.showCompleted
@@ -239,15 +273,17 @@ func (m *Model) viewTasks() []*model.Task {
 	if m.view == All {
 		return m.data.Tasks
 	}
-	td := today()
+	day := m.Day()
 	var out []*model.Task
 	for _, t := range m.data.Tasks {
 		d, _, ok := t.Due.Time()
 		if !ok {
 			continue
 		}
-		if m.view == Today && !dayOf(d).Before(td.AddDate(0, 0, 1)) {
-			continue
+		if m.view == Today {
+			if dd := dayOf(d); !dd.Equal(day) && (!m.onToday() || !dd.Before(day)) {
+				continue
+			}
 		}
 		out = append(out, t)
 	}
@@ -505,7 +541,11 @@ func (m *Model) addFlatGroup(name string, ts []*model.Task) {
 // --- rendering -----------------------------------------------------------
 
 func (m *Model) Title() string {
-	return "Tasks · " + m.view.String() + " · by " + m.groupBy[m.view].String()
+	name := m.view.String()
+	if m.view == Today && !m.onToday() {
+		name = m.dayLabel()
+	}
+	return "Tasks · " + name + " · by " + m.groupBy[m.view].String()
 }
 
 func (m *Model) Render(w, h int, active bool) []string {
@@ -515,7 +555,7 @@ func (m *Model) Render(w, h int, active bool) []string {
 	var lines []string
 	m.lineRows = m.lineRows[:0]
 	if len(m.rows) == 0 {
-		empty := map[View]string{Today: "Nothing due today", Upcoming: "No upcoming tasks", All: "No tasks"}[m.view]
+		empty := map[View]string{Today: "Nothing due " + m.dayOn(), Upcoming: "No upcoming tasks", All: "No tasks"}[m.view]
 		lines = append(lines, th.Faint.Render("  "+empty+" — press a to add one"))
 	} else {
 		// Blank line before each top-level group header except the first.
@@ -686,10 +726,18 @@ func (m *Model) footer() []string {
 	}
 	return []string{
 		th.Faint.Render(fmt.Sprintf("  %d%% of %s complete.", pct,
-			map[View]string{Today: "today's tasks", Upcoming: "upcoming tasks", All: "all tasks"}[m.view])),
+			map[View]string{Today: "tasks due " + m.dayOn(), Upcoming: "upcoming tasks", All: "all tasks"}[m.view])),
 		"  " + th.DoneIcon.Render(fmt.Sprintf("%d", done)) + th.Faint.Render(" done · ") +
 			th.PendingIcon.Render(fmt.Sprintf("%d", pending)) + th.Faint.Render(" pending"),
 	}
+}
+
+// dayOn is "today" or "on Tue 27 Oct".
+func (m *Model) dayOn() string {
+	if m.onToday() {
+		return "today"
+	}
+	return "on " + m.dayLabel()
 }
 
 func today() time.Time {

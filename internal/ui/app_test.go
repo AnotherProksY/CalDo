@@ -380,3 +380,53 @@ func TestTaskViews(t *testing.T) {
 	}
 	t.Fatal("quick-added task not found")
 }
+
+func TestPanesFollowEachOther(t *testing.T) {
+	m := newTestModel(t)
+	td := time.Now()
+	tomorrow := td.AddDate(0, 0, 1)
+	later := td.AddDate(0, 0, 5)
+	for _, tk := range []*model.Task{
+		{Content: "Due today", Due: &model.Due{Date: td.Format(time.DateOnly)}},
+		{Content: "Due tomorrow", Due: &model.Due{Date: tomorrow.Format(time.DateOnly)}},
+		{Content: "Due later", Due: &model.Due{Date: later.Format(time.DateOnly)}},
+	} {
+		tk.ProjectID = store.LocalInboxID
+		must(t, m.st.SaveTask(tk))
+	}
+	m.Update(changed())
+	press(m, "space", "1", "space") // tasks: Today; back to the calendar
+
+	// The calendar's day drives the tasks pane.
+	press(m, "l")
+	title := m.tasks.Title()
+	if !strings.Contains(title, tomorrow.Format("Mon 2 Jan")) {
+		t.Fatalf("tasks pane should show the calendar's day, got %q", title)
+	}
+	if s := screen(m); !strings.Contains(s, "Due tomorrow") || strings.Contains(s, "☐ Due today") {
+		t.Fatalf("tasks pane should list tomorrow's tasks only:\n%s", s)
+	}
+
+	// A task selected in the calendar is selected in the tasks pane. Picking
+	// "Due today" in the tasks pane put the calendar's focus on its day list,
+	// so the new day's first item is selected.
+	if o, ok := m.cal.Selected(); !ok || o.Task == nil || o.Task.Content != "Due tomorrow" {
+		t.Fatalf("expected the task selected in the calendar, got %+v", o)
+	}
+	if tk := m.tasks.Selected(); tk == nil || tk.Content != "Due tomorrow" {
+		t.Fatalf("tasks pane should select the calendar's task, got %+v", tk)
+	}
+
+	// Moving through All jumps the calendar to the task's day.
+	press(m, "space", "3", "g")
+	for i := 0; i < 5 && m.tasks.Selected().Content != "Due later"; i++ {
+		press(m, "j")
+	}
+	want := time.Date(later.Year(), later.Month(), later.Day(), 0, 0, 0, 0, time.Local)
+	if !m.cal.Cursor().Equal(want) {
+		t.Fatalf("calendar should jump to %s, got %s", want.Format(time.DateOnly), m.cal.Cursor().Format(time.DateOnly))
+	}
+	if o, ok := m.cal.Selected(); !ok || o.Task == nil || o.Task.Content != "Due later" {
+		t.Fatalf("calendar should select the task, got %+v", o)
+	}
+}

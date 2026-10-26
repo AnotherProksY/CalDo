@@ -59,6 +59,8 @@ type Model struct {
 	syncErr     string
 
 	calColors map[string]string
+	// The task selected in each pane after the last update; see linkPanes.
+	lastTaskSel, lastCalTask string
 	// Geometry of the last frame, for mouse hit-testing.
 	layout    layout
 	dlgRect   rect
@@ -241,6 +243,41 @@ func (m *Model) scheduleSync() tea.Cmd {
 }
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	model, cmd := m.update(msg)
+	m.linkPanes()
+	return model, cmd
+}
+
+// linkPanes keeps both panes on the same day: the tasks pane's Today view
+// lists the calendar's selected day, a task selected in one pane is selected
+// in the other, and moving through Upcoming or All jumps the calendar to the
+// selected task's due date.
+func (m *Model) linkPanes() {
+	if t := m.tasks.Selected(); m.focus == paneTasks && t != nil && t.ID != m.lastTaskSel {
+		if d, _, ok := t.Due.Time(); ok {
+			day := time.Date(d.Year(), d.Month(), d.Day(), 0, 0, 0, 0, time.Local)
+			// Today already lists the calendar's day; its overdue tasks must not move it.
+			if m.tasks.CurrentView() != tasks.Today || day.Equal(m.cal.Cursor()) {
+				m.cal.SelectEvent("task:"+t.ID, day)
+			}
+		}
+	}
+	m.tasks.SetDay(m.cal.SelectedDay())
+	calTask := ""
+	if o, ok := m.cal.Selected(); ok && o.Task != nil {
+		calTask = o.Task.ID
+	}
+	if m.focus == paneCalendar && calTask != "" && calTask != m.lastCalTask {
+		m.tasks.Select(calTask)
+	}
+	m.lastCalTask = calTask
+	m.lastTaskSel = ""
+	if t := m.tasks.Selected(); t != nil {
+		m.lastTaskSel = t.ID
+	}
+}
+
+func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.w, m.h = msg.Width, msg.Height

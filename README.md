@@ -8,7 +8,7 @@ A terminal calendar and task manager with two-way sync to **Google Calendar** an
 - Events that have already ended are greyed out (`calendar.dim_past`), so upcoming ones stand out.
 - Tasks with a due date also show up in the calendar, colored by project. `e`, `x`, `d`, `m` and `p` act on the task when one is selected there.
 - Month grid with a day timeline (events as blocks sized by their duration, like Apple Calendar's day view), plus 3-day, week and agenda views. Recurring events are supported, with "only this / this and following / all" edits.
-- Three task views: **Today** (overdue and due today), **Upcoming** (dated tasks, one group per day) and **All**. Each view remembers its own grouping.
+- Three task views: **Today** (the day selected in the calendar; on today also overdue tasks), **Upcoming** (dated tasks, one group per day) and **All**. Each view remembers its own grouping.
 - The task list looks like taskbook: groups with `[done/total]`, `✔ ☐` icons, priorities and a completion summary.
 - Press `e` to edit any event or task in `$EDITOR` (vim/nvim) as a YAML frontmatter + Markdown document.
 - Desktop notifications via `notify-send`. Event reminders have separate defaults for timed and all-day events and can be overridden per event. Tasks notify at their due time.

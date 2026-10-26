@@ -526,8 +526,8 @@ func (m *Model) quickAddTask() tea.Cmd {
 		}
 		t.Sort = int(time.Now().Unix())
 		if t.Due == nil && m.tasks.CurrentView() == tasks.Today {
-			// Like Todoist: tasks added in Today are due today, or they'd vanish.
-			t.Due = editor.ParseDue("today", nil)
+			// Like Todoist: tasks added in Today are due on the day it shows, or they'd vanish.
+			t.Due = editor.ParseDue(m.tasks.Day().Format(time.DateOnly), nil)
 		}
 		if err := m.st.SaveTask(t); err != nil {
 			return status(err)

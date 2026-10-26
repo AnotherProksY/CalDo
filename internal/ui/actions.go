@@ -415,7 +415,7 @@ func (m *Model) eventDetail(o model.Occurrence) dialog {
 		field("Calendar", th.Fg(cal.Color).Render("● ")+cal.Name),
 	}
 	if e.Location != "" {
-		lines = append(lines, field("Where", e.Location))
+		lines = append(lines, field("Where", theme.OneLine(e.Location)))
 	}
 	if o.IsRecurring() {
 		lines = append(lines, field("Repeats", strings.Join(o.Master.Recurrence, " ")))

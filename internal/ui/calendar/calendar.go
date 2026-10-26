@@ -546,7 +546,7 @@ func (m *Model) eventLine(o model.Occurrence, day time.Time, w int, selected, ac
 		marks += " ●"
 	}
 	if o.Event.Location != "" {
-		marks += " @ " + o.Event.Location
+		marks += " @ " + theme.OneLine(o.Event.Location)
 	}
 	text := " " + when + " " + title
 	plainText := text

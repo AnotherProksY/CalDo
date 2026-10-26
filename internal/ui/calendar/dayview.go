@@ -409,7 +409,7 @@ func (m *Model) blockDetails(o model.Occurrence, day time.Time, height int) []bl
 	if o.Event.Dirty {
 		when += " ●"
 	}
-	loc := o.Event.Location
+	loc := theme.OneLine(o.Event.Location)
 	if height <= minSlots && loc != "" {
 		when += " · " + loc
 		loc = ""

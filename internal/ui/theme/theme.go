@@ -128,12 +128,27 @@ func Truncate(s string, w int, tail string) string { return WidthMethod.Truncate
 // do not), which shifts everything after it, so it is dropped before drawing.
 const emojiVS = "\uFE0F"
 
+// OneLine joins the non-blank lines of s with ", ", for multi-line values
+// such as street addresses from Google Calendar.
+func OneLine(s string) string {
+	var parts []string
+	for _, l := range strings.Split(s, "\n") {
+		if l = strings.TrimSpace(l); l != "" {
+			parts = append(parts, l)
+		}
+	}
+	return strings.Join(parts, ", ")
+}
+
+// controlChars would move the cursor and break the frame; Fit turns them into spaces.
+var controlChars = strings.NewReplacer("\r\n", " ", "\n", " ", "\r", " ", "\t", " ")
+
 // Fit pads or truncates s to exactly w cells.
 func Fit(s string, w int) string {
 	if w <= 0 {
 		return ""
 	}
-	s = strings.ReplaceAll(s, emojiVS, "")
+	s = controlChars.Replace(strings.ReplaceAll(s, emojiVS, ""))
 	sw := StringWidth(s)
 	if sw <= w {
 		return s + strings.Repeat(" ", w-sw)

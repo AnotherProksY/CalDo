@@ -84,3 +84,31 @@ func TestTint(t *testing.T) {
 		t.Errorf("half red over black = %d,%d,%d", r>>8, g>>8, b>>8)
 	}
 }
+
+func TestDayTimelineMultilineLocation(t *testing.T) {
+	day := time.Date(2026, 10, 17, 0, 0, 0, 0, time.Local)
+	loc := "221B Baker Street\nLondon, UK, NW1 6XE"
+	src := fakeSource{
+		{Event: &model.Event{Title: "Чекап", Location: loc}, Start: day.Add(9 * time.Hour), End: day.Add(9*time.Hour + 30*time.Minute)},
+		{Event: &model.Event{Title: "Груминг", Location: loc}, Start: day.Add(10 * time.Hour), End: day.Add(11*time.Hour + 30*time.Minute)},
+	}
+	m := New(src, theme.New(config.Default().Theme), Month, time.Monday, 14, "15:04")
+	m.cursor = day
+	const w = 90
+	lines, _ := m.timeline([]dayCol{{day, m.dayOccurrences(day), w - gutterW}}, "", true)
+	var screen []string
+	for _, l := range lines {
+		if strings.ContainsAny(l.text, "\r\n") {
+			t.Errorf("a row contains a line break: %q", l.text)
+		}
+		p := ansi.Strip(l.text)
+		if got := theme.StringWidth(p); got != w {
+			t.Errorf("line %q is %d cells wide, want %d", p, got, w)
+		}
+		screen = append(screen, p)
+	}
+	if s := strings.Join(screen, "\n"); !strings.Contains(s, "· 221B Baker Street, London, UK, NW1 6XE") ||
+		!strings.Contains(s, "@ 221B Baker Street, London, UK, NW1 6XE") {
+		t.Errorf("the address should be joined into one line:\n%s", s)
+	}
+}

@@ -39,7 +39,7 @@ make demo         # try it with sample data in a throwaway database
 Push a `v*` tag (`git tag v0.1.0 && git push --tags`). The `release` workflow runs GoReleaser (`.goreleaser.yaml`), which publishes the archives to GitHub Releases and updates the formula in `AnotherProksY/homebrew-tap`. It needs these repository secrets:
 
 - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`: the Desktop OAuth client built into release binaries.
-- `HOMEBREW_TAP_TOKEN`: a fine-grained token with *Contents: write* on the tap repository.
+- `HOMEBREW_TAP_TOKEN` (optional): a fine-grained token with *Contents: write* on the tap repository. Without it the workflow skips Homebrew and only publishes the GitHub Release.
 
 ## Connect services
 

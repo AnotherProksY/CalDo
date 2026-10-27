@@ -1,6 +1,8 @@
-# CalDo
+<p align="center"><img src="assets/logo.svg" width="128" alt="CalDo logo"></p>
 
-A terminal calendar and task manager with two-way sync to **Google Calendar** and **Todoist**.
+<h1 align="center">CalDo</h1>
+
+<p align="center">A terminal calendar and task manager with two-way sync to <b>Google Calendar</b> and <b>Todoist</b>.</p>
 
 - Split screen: calendar on the left, tasks on the right. `Space` switches panes and `\` toggles between split and full screen.
 - You move a cursor over days and individual events or tasks, as in calcurse.

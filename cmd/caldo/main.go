@@ -112,7 +112,7 @@ func main() {
 			fatal(err)
 		}
 	case "notify":
-		if err := runNotify(cfg, st); err != nil {
+		if err := runNotify(cfg, st, paths); err != nil {
 			fatal(err)
 		}
 	case "service":

@@ -24,6 +24,12 @@ Commands:
   auth google     connect Google Calendar (opens a browser)
   auth todoist    connect Todoist (paste your API token)
   sync            run one sync cycle and exit
+  add task <text>   add a task: "Buy milk #Home @errands p1 tomorrow"
+  add event <text>  add an event: "tomorrow 14:00-15:30 Review #Work"
+                  ("-" reads the text from stdin; --no-sync skips the push)
+  agenda          list today's events and tasks (--days N, --json, --no-tasks)
+  next            print what is on now or next (--json); exits 1 if nothing
+  waybar          JSON for a waybar custom module (--width, --soon)
   notify          show desktop notifications for due reminders and exit
   service install|uninstall
                   run notify every minute and sync every 15 minutes in the
@@ -87,6 +93,22 @@ func main() {
 		}
 	case "sync":
 		if err := runSyncOnce(cfg, st, paths); err != nil {
+			fatal(err)
+		}
+	case "add":
+		if err := runAdd(args[1:], cfg, st, paths); err != nil {
+			fatal(err)
+		}
+	case "agenda":
+		if err := runAgenda(args[1:], st); err != nil {
+			fatal(err)
+		}
+	case "next":
+		if err := runNext(args[1:], st); err != nil {
+			fatal(err)
+		}
+	case "waybar":
+		if err := runWaybar(args[1:], st); err != nil {
 			fatal(err)
 		}
 	case "notify":

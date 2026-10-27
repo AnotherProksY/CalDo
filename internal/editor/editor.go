@@ -371,6 +371,15 @@ func ParseDue(s string, prev *model.Due) *model.Due {
 	return d
 }
 
+// ResolveDay reads a single day: YYYY-MM-DD, today/tomorrow (also in
+// Russian) or a weekday name, which means its next occurrence.
+func ResolveDay(s string) (time.Time, bool) {
+	if t, err := time.ParseInLocation(dateLayout, strings.TrimSpace(s), time.Local); err == nil {
+		return t, true
+	}
+	return resolveWord(strings.TrimSpace(s), time.Now())
+}
+
 func resolveWord(s string, now time.Time) (time.Time, bool) {
 	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.Local)
 	switch strings.ToLower(s) {

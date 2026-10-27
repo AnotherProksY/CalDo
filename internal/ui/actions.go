@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -15,6 +14,7 @@ import (
 
 	"caldo/internal/editor"
 	"caldo/internal/model"
+	"caldo/internal/quick"
 	"caldo/internal/recur"
 	"caldo/internal/remind"
 	"caldo/internal/ui/tasks"
@@ -121,17 +121,7 @@ func (m *Model) writable(calendarID string) bool {
 
 func (m *Model) defaultCalendar() string {
 	cals, _ := m.st.Calendars()
-	for _, c := range cals {
-		if c.Enabled && !c.ReadOnly {
-			return c.ID
-		}
-	}
-	for _, c := range cals {
-		if !c.ReadOnly {
-			return c.ID
-		}
-	}
-	return ""
+	return quick.DefaultCalendar(cals)
 }
 
 // occurrenceView is the event as the user sees this occurrence.
@@ -297,33 +287,17 @@ func (m *Model) applyEventDelete(o model.Occurrence, sc scope) error {
 	return m.st.DeleteEvent(master.ID)
 }
 
-var timePrefix = regexp.MustCompile(`^(\d{1,2}[:.]\d{2})(?:\s*-\s*(\d{1,2}[:.]\d{2}))?\s+(.+)$`)
-
 // quickAddEvent: "Title" makes an all-day event, "14:00 Title" or "14:00-15:30 Title" a timed one.
 func (m *Model) quickAddEvent() tea.Cmd {
 	day := m.cal.SelectedDay()
-	m.dlg = newInput("New event · "+day.Format("Mon 2 Jan"), "[HH:MM[-HH:MM]] title · empty title cancels · A opens $EDITOR", "", func(s string) tea.Cmd {
+	m.dlg = newInput("New event · "+day.Format("Mon 2 Jan"), "[HH:MM[-HH:MM]] title [#Calendar] · empty title cancels · A opens $EDITOR", "", func(s string) tea.Cmd {
 		if s == "" {
 			return nil
 		}
-		calID := m.defaultCalendar()
-		e := &model.Event{CalendarID: calID, Title: s, Start: day, End: day.AddDate(0, 0, 1), AllDay: true}
-		if mt := timePrefix.FindStringSubmatch(s); mt != nil {
-			st, err1 := clockOn(day, mt[1])
-			if err1 != nil {
-				return status(err1)
-			}
-			en := st.Add(m.cfg.DefaultEventDuration())
-			if mt[2] != "" {
-				var err error
-				if en, err = clockOn(day, mt[2]); err != nil {
-					return status(err)
-				}
-				if !en.After(st) {
-					en = en.AddDate(0, 0, 1)
-				}
-			}
-			e.Title, e.Start, e.End, e.AllDay = mt[3], st, en, false
+		cals, _ := m.st.Calendars()
+		e, err := quick.Event(s, day, false, m.cfg.DefaultEventDuration(), cals, m.defaultCalendar())
+		if err != nil {
+			return status(err)
 		}
 		if err := m.st.SaveEvent(e); err != nil {
 			return status(err)
@@ -333,14 +307,6 @@ func (m *Model) quickAddEvent() tea.Cmd {
 		return changed
 	})
 	return nil
-}
-
-func clockOn(day time.Time, hm string) (time.Time, error) {
-	t, err := time.Parse("15:04", strings.Replace(hm, ".", ":", 1))
-	if err != nil {
-		return time.Time{}, fmt.Errorf("bad time %q", hm)
-	}
-	return time.Date(day.Year(), day.Month(), day.Day(), t.Hour(), t.Minute(), 0, 0, time.Local), nil
 }
 
 func (m *Model) newEventInEditor() tea.Cmd {
@@ -456,63 +422,14 @@ func (m *Model) defaultProject() (string, string) {
 		return p, s
 	}
 	ps, _ := m.st.Projects()
-	for _, p := range ps {
-		if p.Enabled && p.IsInbox {
-			return p.ID, ""
-		}
-	}
-	for _, p := range ps {
-		if p.Enabled {
-			return p.ID, ""
-		}
-	}
-	return "", ""
+	return quick.DefaultProject(ps), ""
 }
-
-var dueSuffix = regexp.MustCompile(`(?i)\s+(today|tomorrow|tod|tom|сегодня|завтра|послезавтра|next week|` +
-	`mon(?:day)?|tue(?:sday)?|wed(?:nesday)?|thu(?:rsday)?|fri(?:day)?|sat(?:urday)?|sun(?:day)?|` +
-	`in \d+ (?:days?|weeks?)|every .+|каждый .+|\d{4}-\d{2}-\d{2}(?: \d{1,2}:\d{2})?)$`)
 
 // parseQuickTask understands "Title #Project @label p1 tomorrow".
 func (m *Model) parseQuickTask(s string) (*model.Task, error) {
 	projectID, sectionID := m.defaultProject()
-	t := &model.Task{ProjectID: projectID, SectionID: sectionID, Priority: 1}
 	projects, _ := m.st.Projects()
-	var words []string
-	for _, w := range strings.Fields(s) {
-		switch {
-		case strings.HasPrefix(w, "#") && len(w) > 1:
-			name := strings.ReplaceAll(w[1:], "_", " ")
-			found := false
-			for _, p := range projects {
-				if strings.EqualFold(p.Name, name) {
-					t.ProjectID, t.SectionID, found = p.ID, "", true
-				}
-			}
-			if !found {
-				return nil, fmt.Errorf("unknown project %q", name)
-			}
-		case strings.HasPrefix(w, "@") && len(w) > 1:
-			t.Labels = append(t.Labels, w[1:])
-		case len(w) == 2 && (w[0] == 'p' || w[0] == 'P') && w[1] >= '1' && w[1] <= '4':
-			t.Priority = model.PriorityFromDisplay(int(w[1] - '0'))
-		default:
-			words = append(words, w)
-		}
-	}
-	content := strings.Join(words, " ")
-	if mt := dueSuffix.FindStringSubmatchIndex(content); mt != nil {
-		t.Due = editor.ParseDue(content[mt[2]:mt[3]], nil)
-		content = strings.TrimSpace(content[:mt[0]])
-	}
-	if content == "" {
-		return nil, errors.New("task title is empty")
-	}
-	if t.ProjectID == "" {
-		return nil, errors.New("no project available")
-	}
-	t.Content = content
-	return t, nil
+	return quick.Task(s, projects, projectID, sectionID)
 }
 
 func (m *Model) quickAddTask() tea.Cmd {

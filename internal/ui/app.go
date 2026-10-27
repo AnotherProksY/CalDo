@@ -11,6 +11,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"caldo/internal/agenda"
 	"caldo/internal/config"
 	"caldo/internal/model"
 	"caldo/internal/recur"
@@ -109,33 +110,13 @@ func (m *Model) Occurrences(from, to time.Time) []model.Occurrence {
 	return occs
 }
 
-// taskOccurrences shows open tasks with a due date as calendar items: all-day
-// on their date, or as a point in time when the due date has a time.
 func (m *Model) taskOccurrences(from, to time.Time) []model.Occurrence {
 	ts, err := m.st.Tasks(false)
 	if err != nil {
 		m.setError(err)
 		return nil
 	}
-	var out []model.Occurrence
-	for _, t := range ts {
-		due, hasTime, ok := t.Due.Time()
-		if !ok {
-			continue
-		}
-		start, end := due, due
-		if !hasTime {
-			start = time.Date(due.Year(), due.Month(), due.Day(), 0, 0, 0, 0, time.Local)
-			end = start.AddDate(0, 0, 1)
-		}
-		if !start.Before(to) || (end.Before(from) || (end.Equal(from) && !end.Equal(start))) {
-			continue
-		}
-		ev := &model.Event{ID: "task:" + t.ID, CalendarID: t.ProjectID, Title: t.Content,
-			Description: t.Description, Start: start, End: end, AllDay: !hasTime, Dirty: t.Dirty}
-		out = append(out, model.Occurrence{Event: ev, Start: start, End: end, Task: t})
-	}
-	return out
+	return agenda.TaskOccurrences(ts, from, to)
 }
 
 func (m *Model) CalendarColor(id string) string { return m.calColors[id] }

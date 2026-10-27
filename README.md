@@ -78,6 +78,42 @@ The first-run setup offers to do this for you.
 
 The first `caldo notify` run is silent. It only records the reminders that are already due, so enabling the timer does not replay everything from earlier today.
 
+## Command line and waybar
+
+```sh
+caldo add task "Buy milk #Home @errands p1 tomorrow"
+caldo add event "tomorrow 14:00-15:30 Design review #Work"   # date: YYYY-MM-DD, today, tomorrow, mon…sun
+caldo agenda --days 3          # events and tasks per day; --json for scripts, --no-tasks for events only
+caldo next                     # "13:00 Lunch · in 20m"; exits 1 when nothing is coming up
+caldo waybar                   # JSON for a waybar custom module
+```
+
+`caldo add` saves the item and syncs right away; offline it stays queued. Pass `--no-sync` to skip the sync, or `-` as the text to read it from stdin, e.g. from a launcher prompt:
+
+```sh
+fuzzel --dmenu --prompt "Task: " | caldo add task -
+```
+
+The read commands (`agenda`, `next`, `waybar`) only read the local database, which the background sync keeps fresh, so they return instantly and work offline.
+
+Waybar module (`~/.config/waybar/config`):
+
+```jsonc
+"custom/caldo": {
+    "exec": "caldo waybar",
+    "return-type": "json",
+    "interval": 30,
+    "on-click": "foot -e caldo"
+}
+```
+
+The text shows the current or next event and the number of open tasks for today. The tooltip lists the rest of today, overdue tasks, today's tasks and tomorrow. CSS classes: `ongoing`, `soon` (starts within `--soon`, 15 minutes by default), `upcoming`, `free`, plus `overdue` when tasks are overdue:
+
+```css
+#custom-caldo.soon    { color: #e2231a; }
+#custom-caldo.overdue { font-weight: bold; }
+```
+
 ## Keys
 
 Press `?` in the app for the full list. The basics:

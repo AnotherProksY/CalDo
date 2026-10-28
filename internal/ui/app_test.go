@@ -430,3 +430,34 @@ func TestPanesFollowEachOther(t *testing.T) {
 		t.Fatalf("calendar should select the task, got %+v", o)
 	}
 }
+
+func TestCompletedTasksStayOnTheirDay(t *testing.T) {
+	m := newTestModel(t)
+	day := func(n int) string { return time.Now().AddDate(0, 0, n).Format("2006-01-02") }
+	for _, tk := range []*model.Task{
+		{Content: "Done yesterday", Checked: true, Due: &model.Due{Date: day(-1)}},
+		{Content: "Done today", Checked: true, Due: &model.Due{Date: day(0)}},
+		{Content: "Still late", Due: &model.Due{Date: day(-2)}},
+	} {
+		tk.ProjectID = store.LocalInboxID
+		must(t, m.st.SaveTask(tk))
+	}
+	m.Update(changed())
+	press(m, "space", "1", "v") // tasks pane, Today view, show completed
+
+	s := screen(m)
+	if !strings.Contains(s, "Done today") || !strings.Contains(s, "Still late") || strings.Contains(s, "Done yesterday") {
+		t.Fatalf("today should list today's done tasks and open overdue ones, not past done ones:\n%s", s)
+	}
+
+	press(m, "space", "h", "space") // calendar one day back, back to tasks
+	s = screen(m)
+	if !strings.Contains(s, "Done yesterday") || strings.Contains(s, "Done today") || strings.Contains(s, "Still late") {
+		t.Fatalf("yesterday should list only yesterday's tasks:\n%s", s)
+	}
+
+	press(m, "2") // Upcoming
+	if s := screen(m); strings.Contains(s, "Done yesterday") || !strings.Contains(s, "Done today") {
+		t.Fatalf("upcoming must not list done tasks from past days:\n%s", s)
+	}
+}

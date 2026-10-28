@@ -280,10 +280,19 @@ func (m *Model) viewTasks() []*model.Task {
 		if !ok {
 			continue
 		}
-		if m.view == Today {
-			if dd := dayOf(d); !dd.Equal(day) && (!m.onToday() || !dd.Before(day)) {
+		dd := dayOf(d)
+		switch {
+		case m.view == Today && t.Checked:
+			// Done tasks stay on their own day; only open ones can be overdue.
+			if !dd.Equal(day) {
 				continue
 			}
+		case m.view == Today:
+			if !dd.Equal(day) && (!m.onToday() || !dd.Before(day)) {
+				continue
+			}
+		case t.Checked && dd.Before(today()):
+			continue // Upcoming: a done task from the past is not upcoming
 		}
 		out = append(out, t)
 	}
